@@ -16,6 +16,11 @@ class MenuBarManager: NSObject, ObservableObject {
     @Published private(set) var clickedProfileUsage: ClaudeUsage?
     @Published private(set) var clickedProfileAPIUsage: APIUsage?
 
+    // Burn rate and active session tracking
+    @Published private(set) var burnRateMetrics: BurnRateMetrics = .zero
+    private let burnRateTracker = BurnRateTracker.shared
+    private let activeSessionDetector = ActiveSessionDetector.shared
+
     // Track when refresh was last triggered (for distinguishing user vs auto refresh)
     private var lastRefreshTriggerTime: Date = .distantPast
 
@@ -172,6 +177,9 @@ class MenuBarManager: NSObject, ObservableObject {
         // Start auto-start session service (5-minute cycle for all profiles)
         autoStartService.start()
 
+        // Start active session detection
+        activeSessionDetector.start()
+
         // Observe appearance changes
         observeAppearanceChanges()
 
@@ -190,6 +198,7 @@ class MenuBarManager: NSObject, ObservableObject {
         refreshTimer = nil
         networkMonitor.stopMonitoring()
         autoStartService.stop()
+        activeSessionDetector.stop()
         cancellables.removeAll()  // Clean up Combine subscriptions
         refreshIntervalObserver?.invalidate()
         refreshIntervalObserver = nil
@@ -278,6 +287,9 @@ class MenuBarManager: NSObject, ObservableObject {
             } else {
                 self.apiUsage = nil
             }
+
+            // Reset burn rate to new profile's metrics (or .zero if none)
+            self.burnRateMetrics = self.burnRateTracker.metrics(for: profile.id)
         }
 
         // 2. Update refresh interval with profile's setting
@@ -872,6 +884,16 @@ class MenuBarManager: NSObject, ObservableObject {
                             profileName: profile.name,
                             settings: profile.notificationSettings
                         )
+                    }
+
+                    // Record burn rate snapshot
+                    if let profileId = self.profileManager.activeProfile?.id {
+                        self.burnRateTracker.record(
+                            profileId: profileId,
+                            sessionPercentage: newUsage.sessionPercentage,
+                            weeklyPercentage: newUsage.weeklyPercentage
+                        )
+                        self.burnRateMetrics = self.burnRateTracker.metrics(for: profileId)
                     }
                 }
 

@@ -46,6 +46,16 @@ struct PopoverContentView: View {
             // Intelligent Usage Dashboard
             SmartUsageDashboard(usage: displayUsage, apiUsage: displayAPIUsage)
 
+            // Burn Rate & Active Sessions (only renders when content exists)
+            if manager.burnRateMetrics.hasSessionRate || !ActiveSessionDetector.shared.activeSessions.isEmpty {
+                VStack(spacing: 16) {
+                    BurnRateSection(metrics: manager.burnRateMetrics)
+                    ActiveSessionsSection()
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
+            }
+
             // Contextual Insights
             if showInsights {
                 ContextualInsights(usage: displayUsage)
@@ -890,6 +900,214 @@ struct SmartActionButton: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 isHovered = hovering
             }
+        }
+    }
+}
+
+// MARK: - Burn Rate Section
+struct BurnRateSection: View {
+    let metrics: BurnRateMetrics
+
+    /// Urgency color: shifts from orange to red as time runs out
+    private var rateColor: Color {
+        guard let mins = metrics.sessionMinutesRemaining else { return .orange }
+        if mins < 15 { return .red }
+        if mins < 30 { return .orange }
+        return Color(nsColor: .systemYellow)
+    }
+
+    /// Cap estimate at session window (5h) to avoid absurd numbers
+    private var cappedMinutes: Double? {
+        guard let mins = metrics.sessionMinutesRemaining else { return nil }
+        return min(mins, 300) // 5 hours max
+    }
+
+    private var timeRemainingText: String {
+        guard let mins = cappedMinutes else { return "" }
+        if mins >= 300 {
+            return "5h+ remaining"
+        } else if mins < 60 {
+            return String(format: "~%.0fm remaining", mins)
+        } else {
+            let h = Int(mins / 60)
+            let m = Int(mins.truncatingRemainder(dividingBy: 60))
+            return "~\(h)h \(m)m remaining"
+        }
+    }
+
+    var body: some View {
+        if metrics.hasSessionRate {
+            VStack(spacing: 10) {
+                // Header row
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Burn Rate")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.primary)
+
+                        Text("Current pace")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    HStack(spacing: 4) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(rateColor)
+
+                        Text(String(format: "%.1f%%/min", metrics.sessionRatePerMinute))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .foregroundColor(rateColor)
+                    }
+                }
+
+                // Mini progress bar showing estimated depletion
+                if let mins = cappedMinutes {
+                    VStack(spacing: 6) {
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(Color.secondary.opacity(0.15))
+
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [rateColor, rateColor.opacity(0.7)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: geometry.size.width * min(mins / 300.0, 1.0))
+                                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                                    .animation(.easeInOut(duration: 0.8), value: mins)
+                            }
+                        }
+                        .frame(height: 6)
+
+                        HStack {
+                            HStack(spacing: 4) {
+                                Image(systemName: "hourglass")
+                                    .font(.system(size: 8, weight: .medium))
+                                    .foregroundColor(.secondary)
+
+                                Text(timeRemainingText)
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            if metrics.hasWeeklyRate {
+                                Text(String(format: "%.1f%%/hr weekly", metrics.weeklyRatePerHour))
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+            )
+            .transition(.asymmetric(
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .opacity
+            ))
+        }
+    }
+}
+
+// MARK: - Active Sessions Section
+struct ActiveSessionsSection: View {
+    @ObservedObject private var detector = ActiveSessionDetector.shared
+
+    var body: some View {
+        if !detector.activeSessions.isEmpty {
+            VStack(spacing: 8) {
+                // Header
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Active Sessions")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.primary)
+
+                        Text("\(detector.totalProcessCount) Claude Code process\(detector.totalProcessCount == 1 ? "" : "es")")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    // Pulsing live indicator
+                    HStack(spacing: 4) {
+                        Image(systemName: "terminal.fill")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.green)
+
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                    }
+                }
+
+                // Divider
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.1))
+                    .frame(height: 1)
+
+                // Project list
+                ForEach(detector.activeSessions.prefix(5)) { session in
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.secondary.opacity(0.5))
+                            .frame(width: 12)
+
+                        Text(session.projectName)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.primary.opacity(0.85))
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Text("\(session.sessionCount)")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundColor(session.sessionCount > 1 ? .green : .secondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule()
+                                    .fill(session.sessionCount > 1
+                                          ? Color.green.opacity(0.12)
+                                          : Color.secondary.opacity(0.08))
+                            )
+                    }
+                    .padding(.vertical, 1)
+                }
+
+                if detector.activeSessions.count > 5 {
+                    HStack {
+                        Spacer()
+                        Text("+\(detector.activeSessions.count - 5) more")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+            )
+            .transition(.asymmetric(
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .opacity
+            ))
         }
     }
 }
