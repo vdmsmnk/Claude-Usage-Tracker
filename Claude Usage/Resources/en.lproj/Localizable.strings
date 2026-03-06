@@ -694,6 +694,15 @@
 "wizard.skip_migration" = "Skip";
 "wizard.migration_skipped" = "Migration skipped. You can manually sync old data later if needed.";
 
+/* ==================== */
+/* MARK: - Sessions */
+/* ==================== */
+"sessions.title" = "Sessions";
+"sessions.active_count" = "%d active";
+"sessions.recent" = "Recent";
+"sessions.show_all" = "Show all %d";
+"sessions.show_less" = "Show less";
+
 /* Claude Code Info */
 "wizard.claude_code_info_title" = "Using Claude Code?";
 "wizard.claude_code_info_description" = "Usage tracking will work, but CLI status line & auto-start session won't work without session key";

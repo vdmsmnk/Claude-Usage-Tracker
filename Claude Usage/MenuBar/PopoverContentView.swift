@@ -43,19 +43,24 @@ struct PopoverContentView: View {
                 clickedProfileId: manager.clickedProfileId
             )
 
-            // Intelligent Usage Dashboard
-            SmartUsageDashboard(usage: displayUsage, apiUsage: displayAPIUsage)
+            // Scrollable content area
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(spacing: 0) {
+                    // Intelligent Usage Dashboard
+                    SmartUsageDashboard(usage: displayUsage, apiUsage: displayAPIUsage)
 
-            // Sessions & Burn Rate
-            SessionsSection(burnRateMetrics: manager.burnRateMetrics)
+                    // Sessions & Burn Rate
+                    SessionsSection(burnRateMetrics: manager.burnRateMetrics)
 
-            // Contextual Insights
-            if showInsights {
-                ContextualInsights(usage: displayUsage)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity),
-                        removal: .move(edge: .top).combined(with: .opacity)
-                    ))
+                    // Contextual Insights
+                    if showInsights {
+                        ContextualInsights(usage: displayUsage)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
+                    }
+                }
             }
 
             // Smart Footer with Actions
@@ -67,7 +72,7 @@ struct PopoverContentView: View {
                 onQuit: onQuit
             )
         }
-        .frame(width: 280)
+        .frame(width: 380)
         .background(.regularMaterial)
     }
 }
@@ -926,8 +931,8 @@ struct PulsingDot: View {
 
 struct SessionsSection: View {
     let burnRateMetrics: BurnRateMetrics
-    @ObservedObject private var sessionService = SessionDataService.shared
-    @ObservedObject private var detector = ActiveSessionDetector.shared
+    @StateObject private var sessionService = SessionDataService.shared
+    @StateObject private var detector = ActiveSessionDetector.shared
     @State private var showAll = false
 
     private var activeSessions: [SessionDetail] {
@@ -983,8 +988,8 @@ struct SessionsSection: View {
                             Rectangle()
                                 .fill(Color.secondary.opacity(0.1))
                                 .frame(height: 1)
-                            Text("Recent")
-                                .font(.system(size: 8, weight: .medium))
+                            Text("sessions.recent".localized)
+                                .font(.system(size: 9, weight: .medium))
                                 .foregroundColor(.secondary.opacity(0.6))
                             Rectangle()
                                 .fill(Color.secondary.opacity(0.1))
@@ -1007,10 +1012,10 @@ struct SessionsSection: View {
                         }
                     }) {
                         HStack(spacing: 4) {
-                            Text(showAll ? "Show less" : "Show all \(totalCount)")
-                                .font(.system(size: 9, weight: .medium))
+                            Text(showAll ? "sessions.show_less".localized : "sessions.show_all".localized(with: totalCount))
+                                .font(.system(size: 10, weight: .medium))
                             Image(systemName: showAll ? "chevron.up" : "chevron.down")
-                                .font(.system(size: 7, weight: .semibold))
+                                .font(.system(size: 8, weight: .semibold))
                         }
                         .foregroundColor(.secondary.opacity(0.7))
                         .frame(maxWidth: .infinity)
@@ -1060,13 +1065,13 @@ private struct SessionsSectionHeader: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Sessions")
-                    .font(.system(size: 11, weight: .semibold))
+                Text("sessions.title".localized)
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.primary)
 
                 if activeCount > 0 {
-                    Text("\(activeCount) active")
-                        .font(.system(size: 9, weight: .medium))
+                    Text("sessions.active_count".localized(with: activeCount))
+                        .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.secondary)
                 }
             }
@@ -1078,18 +1083,18 @@ private struct SessionsSectionHeader: View {
                 VStack(alignment: .trailing, spacing: 1) {
                     HStack(spacing: 3) {
                         Image(systemName: "flame.fill")
-                            .font(.system(size: 8, weight: .medium))
+                            .font(.system(size: 9, weight: .medium))
                         Text(String(format: "%.1f%%/min", burnRateMetrics.sessionRatePerMinute))
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
                     }
                     .foregroundColor(burnRateColor)
 
                     if let remaining = timeRemainingText {
                         HStack(spacing: 2) {
                             Image(systemName: "hourglass")
-                                .font(.system(size: 6, weight: .medium))
+                                .font(.system(size: 7, weight: .medium))
                             Text(remaining)
-                                .font(.system(size: 8, weight: .medium))
+                                .font(.system(size: 9, weight: .medium))
                         }
                         .foregroundColor(burnRateColor.opacity(0.7))
                     }
@@ -1162,14 +1167,14 @@ private struct SessionCard: View {
                         .frame(width: 6, height: 6)
 
                     Text(displayName)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundColor(session.isActive ? .primary : .primary.opacity(0.6))
                         .lineLimit(1)
 
                     Spacer()
 
                     Text(session.modelShortName)
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 9, weight: .bold))
                         .foregroundColor(modelColor)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
@@ -1184,7 +1189,7 @@ private struct SessionCard: View {
                     HStack(spacing: 0) {
                         Spacer().frame(width: 12) // align with name above
                         Text(subtitle)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.secondary.opacity(0.7))
                             .lineLimit(1)
                     }
@@ -1211,18 +1216,18 @@ private struct SessionCard: View {
                                     .animation(.easeInOut(duration: 0.6), value: session.contextPercentage)
                             }
                         }
-                        .frame(height: 5)
+                        .frame(height: 6)
 
                         // Token counts + percentage
                         HStack {
                             Text("\(SessionDetail.formatTokens(session.contextWindowTokens)) / \(SessionDetail.formatTokens(session.contextWindowLimit))")
-                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .font(.system(size: 9, weight: .medium, design: .monospaced))
                                 .foregroundColor(.secondary.opacity(0.6))
 
                             Spacer()
 
                             Text(String(format: "%.0f%%", session.contextPercentage))
-                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
                                 .foregroundColor(contextColor)
                         }
                     }
@@ -1234,26 +1239,26 @@ private struct SessionCard: View {
                     HStack(spacing: 8) {
                         HStack(spacing: 3) {
                             Image(systemName: "arrow.turn.down.right")
-                                .font(.system(size: 7, weight: .medium))
-                            Text("\(session.turnCount) turns")
                                 .font(.system(size: 8, weight: .medium))
+                            Text("\(session.turnCount) turns")
+                                .font(.system(size: 9, weight: .medium))
                         }
                         .foregroundColor(.secondary.opacity(0.5))
 
                         HStack(spacing: 3) {
                             Image(systemName: "clock")
-                                .font(.system(size: 7, weight: .medium))
-                            Text(session.formattedDuration)
                                 .font(.system(size: 8, weight: .medium))
+                            Text(session.formattedDuration)
+                                .font(.system(size: 9, weight: .medium))
                         }
                         .foregroundColor(.secondary.opacity(0.5))
 
                         if !session.isActive {
                             HStack(spacing: 3) {
                                 Image(systemName: "moon.fill")
-                                    .font(.system(size: 7, weight: .medium))
-                                Text(session.timeAgo)
                                     .font(.system(size: 8, weight: .medium))
+                                Text(session.timeAgo)
+                                    .font(.system(size: 9, weight: .medium))
                             }
                             .foregroundColor(.secondary.opacity(0.4))
                         }

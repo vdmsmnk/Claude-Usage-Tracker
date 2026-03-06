@@ -10,7 +10,7 @@ import Foundation
 import Combine
 
 /// Represents a detected active Claude Code session
-struct ActiveSession: Identifiable, Equatable {
+struct ActiveSession: Identifiable, Equatable, Sendable {
     let id: String // unique key: project path
     let projectPath: String
     let projectName: String
@@ -27,6 +27,7 @@ final class ActiveSessionDetector: ObservableObject {
 
     private var pollTimer: Timer?
     private let pollInterval: TimeInterval = 10
+    private var isScanning = false
 
     private init() {}
 
@@ -36,7 +37,9 @@ final class ActiveSessionDetector: ObservableObject {
         scanForActiveSessions()
         pollTimer?.invalidate()
         pollTimer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
-            self?.scanForActiveSessions()
+            Task { @MainActor [weak self] in
+                self?.scanForActiveSessions()
+            }
         }
     }
 
@@ -48,17 +51,20 @@ final class ActiveSessionDetector: ObservableObject {
     // MARK: - Process-based detection
 
     private func scanForActiveSessions() {
-        DispatchQueue.global(qos: .utility).async { [weak self] in
+        guard !isScanning else { return }
+        isScanning = true
+        Task.detached(priority: .utility) {
             let sessions = Self.detectClaudeProcesses()
-            DispatchQueue.main.async {
+            await MainActor.run { [weak self] in
                 self?.activeSessions = sessions
                 self?.totalProcessCount = sessions.reduce(0) { $0 + $1.sessionCount }
+                self?.isScanning = false
             }
         }
     }
 
     /// Finds running `claude` processes and maps them to project directories via lsof
-    private static func detectClaudeProcesses() -> [ActiveSession] {
+    nonisolated private static func detectClaudeProcesses() -> [ActiveSession] {
         // Step 1: Get PIDs of running `claude` processes
         let pids = getClaudePIDs()
         guard !pids.isEmpty else { return [] }
@@ -84,7 +90,7 @@ final class ActiveSessionDetector: ObservableObject {
     }
 
     /// Get PIDs of all running `claude` processes using pgrep (exact match)
-    private static func getClaudePIDs() -> [Int32] {
+    nonisolated private static func getClaudePIDs() -> [Int32] {
         let pipe = Pipe()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
@@ -112,7 +118,7 @@ final class ActiveSessionDetector: ObservableObject {
     }
 
     /// Get the current working directory of a process via lsof
-    private static func getProcessCWD(pid: Int32) -> String? {
+    nonisolated private static func getProcessCWD(pid: Int32) -> String? {
         let pipe = Pipe()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
