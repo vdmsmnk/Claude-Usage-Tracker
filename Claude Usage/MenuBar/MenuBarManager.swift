@@ -40,6 +40,9 @@ class MenuBarManager: NSObject, ObservableObject {
     // GitHub star prompt window reference
     private var githubPromptWindow: NSWindow?
 
+    // Session dashboard window reference
+    private var dashboardWindow: NSWindow?
+
     // Track which button is currently showing the popover
     private weak var currentPopoverButton: NSStatusBarButton?
 
@@ -409,6 +412,9 @@ class MenuBarManager: NSObject, ObservableObject {
             onPreferences: { [weak self] in
                 self?.closePopoverOrWindow()
                 self?.preferencesClicked()
+            },
+            onDashboard: { [weak self] in
+                self?.showDashboard()
             },
             onQuit: { [weak self] in
                 self?.quitClicked()
@@ -1022,6 +1028,38 @@ class MenuBarManager: NSObject, ObservableObject {
         }
     }
 
+    func showDashboard() {
+        closePopoverOrWindow()
+
+        if let existingWindow = dashboardWindow, existingWindow.isVisible {
+            existingWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+
+            let dashboardView = SessionDashboardView()
+            let hostingController = NSHostingController(rootView: dashboardView)
+
+            let window = NSWindow(contentViewController: hostingController)
+            window.title = "Claude Usage - Session Dashboard"
+            window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            window.setContentSize(NSSize(width: 900, height: 600))
+            window.minSize = NSSize(width: 780, height: 500)
+            window.center()
+            window.isReleasedWhenClosed = false
+            window.isRestorable = false
+            window.delegate = self
+
+            self.dashboardWindow = window
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
     @objc private func quitClicked() {
         NSApplication.shared.terminate(nil)
     }
@@ -1171,6 +1209,9 @@ extension MenuBarManager: NSWindowDelegate {
                 // Hide dock icon again when GitHub prompt window closes
                 NSApp.setActivationPolicy(.accessory)
                 githubPromptWindow = nil
+            } else if window == dashboardWindow {
+                NSApp.setActivationPolicy(.accessory)
+                dashboardWindow = nil
             }
         }
     }

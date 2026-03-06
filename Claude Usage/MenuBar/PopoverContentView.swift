@@ -5,6 +5,7 @@ struct PopoverContentView: View {
     @ObservedObject var manager: MenuBarManager
     let onRefresh: () -> Void
     let onPreferences: () -> Void
+    let onDashboard: () -> Void
     let onQuit: () -> Void
 
     @State private var isRefreshing = false
@@ -69,6 +70,7 @@ struct PopoverContentView: View {
                 status: manager.status,
                 showInsights: $showInsights,
                 onPreferences: onPreferences,
+                onDashboard: onDashboard,
                 onQuit: onQuit
             )
         }
@@ -776,6 +778,7 @@ struct SmartFooter: View {
     let status: ClaudeStatus
     @Binding var showInsights: Bool
     let onPreferences: () -> Void
+    let onDashboard: () -> Void
     let onQuit: () -> Void
 
     var body: some View {
@@ -785,6 +788,12 @@ struct SmartFooter: View {
 
             // Action buttons
             HStack(spacing: 8) {
+                SmartActionButton(
+                    icon: "rectangle.split.3x1.fill",
+                    title: "dashboard.title".localized,
+                    action: onDashboard
+                )
+
                 SmartActionButton(
                     icon: "gearshape.fill",
                     title: "common.settings".localized,
@@ -1120,23 +1129,6 @@ private struct SessionCard: View {
     let session: SessionDetail
     @State private var isHovered = false
 
-    private var contextColor: Color {
-        let pct = session.contextPercentage
-        if pct >= 90 { return .red }
-        if pct >= 75 { return .orange }
-        if pct >= 50 { return Color(nsColor: .systemYellow) }
-        return .green
-    }
-
-    private var modelColor: Color {
-        switch session.modelShortName {
-        case "Opus": return .purple
-        case "Sonnet": return .blue
-        case "Haiku": return .teal
-        default: return .secondary
-        }
-    }
-
     private var displayName: String {
         if !session.slug.isEmpty {
             return session.slug
@@ -1175,12 +1167,12 @@ private struct SessionCard: View {
 
                     Text(session.modelShortName)
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(modelColor)
+                        .foregroundColor(session.modelColor)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(
                             Capsule()
-                                .fill(modelColor.opacity(0.12))
+                                .fill(session.modelColor.opacity(0.12))
                         )
                 }
 
@@ -1207,7 +1199,7 @@ private struct SessionCard: View {
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(
                                         LinearGradient(
-                                            colors: [contextColor, contextColor.opacity(0.7)],
+                                            colors: [session.contextColor, session.contextColor.opacity(0.7)],
                                             startPoint: .leading,
                                             endPoint: .trailing
                                         )
@@ -1222,13 +1214,13 @@ private struct SessionCard: View {
                         HStack {
                             Text("\(SessionDetail.formatTokens(session.contextWindowTokens)) / \(SessionDetail.formatTokens(session.contextWindowLimit))")
                                 .font(.system(size: 9, weight: .medium, design: .monospaced))
-                                .foregroundColor(.secondary.opacity(0.6))
+                                .foregroundColor(.secondary.opacity(0.7))
 
                             Spacer()
 
                             Text(String(format: "%.0f%%", session.contextPercentage))
                                 .font(.system(size: 9, weight: .bold, design: .monospaced))
-                                .foregroundColor(contextColor)
+                                .foregroundColor(session.contextColor)
                         }
                     }
                 }
@@ -1243,7 +1235,7 @@ private struct SessionCard: View {
                             Text("\(session.turnCount) turns")
                                 .font(.system(size: 9, weight: .medium))
                         }
-                        .foregroundColor(.secondary.opacity(0.5))
+                        .foregroundColor(.secondary.opacity(0.65))
 
                         HStack(spacing: 3) {
                             Image(systemName: "clock")
@@ -1251,7 +1243,7 @@ private struct SessionCard: View {
                             Text(session.formattedDuration)
                                 .font(.system(size: 9, weight: .medium))
                         }
-                        .foregroundColor(.secondary.opacity(0.5))
+                        .foregroundColor(.secondary.opacity(0.65))
 
                         if !session.isActive {
                             HStack(spacing: 3) {
@@ -1260,7 +1252,7 @@ private struct SessionCard: View {
                                 Text(session.timeAgo)
                                     .font(.system(size: 9, weight: .medium))
                             }
-                            .foregroundColor(.secondary.opacity(0.4))
+                            .foregroundColor(.secondary.opacity(0.55))
                         }
 
                         Spacer()

@@ -8,6 +8,7 @@
 
 import Foundation
 import Combine
+import SwiftUI
 
 // MARK: - Session Detail Model
 
@@ -24,6 +25,9 @@ struct SessionDetail: Identifiable, Equatable, Sendable {
     let contextWindowTokens: Int
     let contextWindowLimit: Int
     let totalOutputTokens: Int
+    let totalInputTokens: Int
+    let toolUsage: [String: Int]
+    let toolFiles: [String: [String]]
     var isActive: Bool
 
     var contextPercentage: Double {
@@ -40,6 +44,85 @@ struct SessionDetail: Identifiable, Equatable, Sendable {
         if model.contains("sonnet") { return "Sonnet" }
         if model.contains("haiku") { return "Haiku" }
         return "Claude"
+    }
+
+    var contextColor: Color {
+        let pct = contextPercentage
+        if pct >= 90 { return .red }
+        if pct >= 75 { return .orange }
+        if pct >= 50 { return Color(nsColor: .systemYellow) }
+        return .green
+    }
+
+    var modelColor: Color {
+        switch modelShortName {
+        case "Opus": return .purple
+        case "Sonnet": return .blue
+        case "Haiku": return .teal
+        default: return .secondary
+        }
+    }
+
+    /// Excluded internal/meta tools that aren't meaningful to surface
+    private static let internalTools: Set<String> = ["ToolSearch"]
+
+    var totalToolCalls: Int {
+        toolUsage.filter { !Self.internalTools.contains($0.key) }.values.reduce(0, +)
+    }
+
+    /// Shared tool metadata for icons and display labels
+    private static let toolMeta: [String: (label: String, icon: String)] = [
+        "Read": ("Read", "doc.text"),
+        "Edit": ("Edited", "pencil"),
+        "Write": ("Written", "doc.badge.plus"),
+        "Grep": ("Searched", "magnifyingglass"),
+        "Glob": ("Globbed", "folder"),
+        "Bash": ("Bash", "terminal"),
+        "Agent": ("Agent", "person.2"),
+        "LSP": ("LSP", "chevron.left.forwardslash.chevron.right"),
+    ]
+
+    /// Files grouped by tool, derived dynamically from toolFiles keys
+    var filesByOperation: [(tool: String, label: String, icon: String, files: [String])] {
+        // Preferred display order
+        let order = ["Read", "Edit", "Write", "Grep", "Glob", "Bash", "Agent", "LSP"]
+        return toolFiles
+            .filter { !$0.value.isEmpty }
+            .sorted { (order.firstIndex(of: $0.key) ?? Int.max) < (order.firstIndex(of: $1.key) ?? Int.max) }
+            .map { tool, files in
+                let meta = Self.toolMeta[tool] ?? (label: tool, icon: "wrench")
+                return (tool: tool, label: meta.label, icon: meta.icon, files: files)
+            }
+    }
+
+    var totalFilesTouched: Int {
+        var allFiles = Set<String>()
+        for (tool, files) in toolFiles where ["Read", "Edit", "Write"].contains(tool) {
+            allFiles.formUnion(files)
+        }
+        return allFiles.count
+    }
+
+    private static let homePath: String = FileManager.default.homeDirectoryForCurrentUser.path
+
+    /// Shorten a file path relative to the session's project path
+    func shortenPath(_ path: String) -> String {
+        if path.hasPrefix(projectPath) {
+            let relative = String(path.dropFirst(projectPath.count))
+            return relative.hasPrefix("/") ? String(relative.dropFirst()) : relative
+        }
+        if path.hasPrefix(Self.homePath) {
+            return "~" + String(path.dropFirst(Self.homePath.count))
+        }
+        return path
+    }
+
+    /// Tool usage sorted by count descending, excluding internal tools
+    var sortedToolUsage: [(name: String, count: Int)] {
+        toolUsage
+            .filter { !Self.internalTools.contains($0.key) }
+            .sorted { $0.value > $1.value }
+            .map { (name: $0.key, count: $0.value) }
     }
 
     var formattedDuration: String {
@@ -206,9 +289,9 @@ final class SessionDataService: ObservableObject {
             return a.lastActivityTime > b.lastActivityTime
         }
 
-        // Cap at 10
-        if allSessions.count > 10 {
-            allSessions = Array(allSessions.prefix(10))
+        // Cap at 50 (popover shows fewer, dashboard shows all)
+        if allSessions.count > 50 {
+            allSessions = Array(allSessions.prefix(50))
         }
 
         return ScanResult(sessions: allSessions, cache: newCache)
@@ -227,11 +310,11 @@ final class SessionDataService: ObservableObject {
             guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
             defer { try? handle.close() }
 
-            let headData = handle.readData(ofLength: 10_000)
+            let headData = handle.readData(ofLength: 20_000)
             let headStr = String(data: headData, encoding: .utf8) ?? ""
 
             let endOffset = handle.seekToEndOfFile()
-            let tailStart = max(0, endOffset - 30_000)
+            let tailStart = max(0, endOffset - 100_000)
             handle.seek(toFileOffset: tailStart)
             let tailData = handle.readData(ofLength: Int(endOffset - tailStart))
             let tailStr = String(data: tailData, encoding: .utf8) ?? ""
@@ -263,7 +346,10 @@ final class SessionDataService: ObservableObject {
         var model: String?
         var contextTokens = 0
         var totalOutput = 0
+        var totalInput = 0
         var turnCount = 0
+        var toolCounts: [String: Int] = [:]
+        var toolFileSets: [String: Set<String>] = [:]
 
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -299,7 +385,27 @@ final class SessionDataService: ObservableObject {
                     let output = usage["output_tokens"] as? Int ?? 0
 
                     contextTokens = input + cacheCreate + cacheRead
+                    totalInput += input + cacheCreate + cacheRead
                     totalOutput += output
+                }
+
+                // Extract tool usage and file paths from content blocks
+                if let content = message["content"] as? [[String: Any]] {
+                    for block in content {
+                        if block["type"] as? String == "tool_use",
+                           let toolName = block["name"] as? String {
+                            toolCounts[toolName, default: 0] += 1
+
+                            // Extract file paths from tool inputs
+                            if let input = block["input"] as? [String: Any] {
+                                if let filePath = input["file_path"] as? String {
+                                    toolFileSets[toolName, default: []].insert(filePath)
+                                } else if let path = input["path"] as? String {
+                                    toolFileSets[toolName, default: []].insert(path)
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -326,6 +432,9 @@ final class SessionDataService: ObservableObject {
             contextWindowTokens: contextTokens,
             contextWindowLimit: limit,
             totalOutputTokens: totalOutput,
+            totalInputTokens: totalInput,
+            toolUsage: toolCounts,
+            toolFiles: toolFileSets.mapValues { Array($0).sorted() },
             isActive: false
         )
     }

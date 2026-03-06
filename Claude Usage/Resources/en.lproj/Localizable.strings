@@ -703,6 +703,37 @@
 "sessions.show_all" = "Show all %d";
 "sessions.show_less" = "Show less";
 
+/* ==================== */
+/* MARK: - Dashboard */
+/* ==================== */
+"dashboard.title" = "Dashboard";
+"dashboard.search" = "Search sessions...";
+"dashboard.active" = "Active";
+"dashboard.no_sessions" = "No sessions found";
+"dashboard.select_session" = "Select a session";
+"dashboard.select_hint" = "Choose a session from the list to view details";
+"dashboard.stat_total" = "Total";
+"dashboard.stat_active" = "Active";
+"dashboard.stat_tool_calls" = "Tool Calls";
+"dashboard.metric_turns" = "Turns";
+"dashboard.metric_duration" = "Duration";
+"dashboard.metric_output" = "Output Tokens";
+"dashboard.context_window" = "Context Window";
+"dashboard.tool_usage" = "Tool Usage";
+"dashboard.total_calls" = "%d total calls";
+"dashboard.session_info" = "Session Info";
+"dashboard.info_session_id" = "Session ID";
+"dashboard.info_model" = "Model";
+"dashboard.info_started" = "Started";
+"dashboard.info_last_activity" = "Last Activity";
+"dashboard.info_project_path" = "Project Path";
+"dashboard.info_input_tokens" = "Input Tokens";
+"dashboard.info_output_tokens" = "Output Tokens";
+"dashboard.metric_files" = "Files";
+"dashboard.files_touched" = "Files Touched";
+"dashboard.files_count" = "%d unique files";
+"dashboard.files_more" = "+%d more...";
+
 /* Claude Code Info */
 "wizard.claude_code_info_title" = "Using Claude Code?";
 "wizard.claude_code_info_description" = "Usage tracking will work, but CLI status line & auto-start session won't work without session key";
