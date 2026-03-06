@@ -46,15 +46,8 @@ struct PopoverContentView: View {
             // Intelligent Usage Dashboard
             SmartUsageDashboard(usage: displayUsage, apiUsage: displayAPIUsage)
 
-            // Burn Rate & Active Sessions (only renders when content exists)
-            if manager.burnRateMetrics.hasSessionRate || !ActiveSessionDetector.shared.activeSessions.isEmpty {
-                VStack(spacing: 16) {
-                    BurnRateSection(metrics: manager.burnRateMetrics)
-                    ActiveSessionsSection()
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-            }
+            // Sessions & Burn Rate
+            SessionsSection(burnRateMetrics: manager.burnRateMetrics)
 
             // Contextual Insights
             if showInsights {
@@ -905,107 +898,125 @@ struct SmartActionButton: View {
 }
 
 // MARK: - Burn Rate Section
-struct BurnRateSection: View {
-    let metrics: BurnRateMetrics
+// MARK: - Pulsing Live Dot
+struct PulsingDot: View {
+    @State private var isPulsing = false
 
-    /// Urgency color: shifts from orange to red as time runs out
-    private var rateColor: Color {
-        guard let mins = metrics.sessionMinutesRemaining else { return .orange }
-        if mins < 15 { return .red }
-        if mins < 30 { return .orange }
-        return Color(nsColor: .systemYellow)
-    }
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.green.opacity(0.3))
+                .frame(width: 12, height: 12)
+                .scaleEffect(isPulsing ? 1.4 : 1.0)
+                .opacity(isPulsing ? 0 : 0.6)
 
-    /// Cap estimate at session window (5h) to avoid absurd numbers
-    private var cappedMinutes: Double? {
-        guard let mins = metrics.sessionMinutesRemaining else { return nil }
-        return min(mins, 300) // 5 hours max
-    }
-
-    private var timeRemainingText: String {
-        guard let mins = cappedMinutes else { return "" }
-        if mins >= 300 {
-            return "5h+ remaining"
-        } else if mins < 60 {
-            return String(format: "~%.0fm remaining", mins)
-        } else {
-            let h = Int(mins / 60)
-            let m = Int(mins.truncatingRemainder(dividingBy: 60))
-            return "~\(h)h \(m)m remaining"
+            Circle()
+                .fill(Color.green)
+                .frame(width: 6, height: 6)
         }
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: false)) {
+                isPulsing = true
+            }
+        }
+    }
+}
+
+// MARK: - Sessions Section (Rich Context Window Tracking)
+
+struct SessionsSection: View {
+    let burnRateMetrics: BurnRateMetrics
+    @ObservedObject private var sessionService = SessionDataService.shared
+    @ObservedObject private var detector = ActiveSessionDetector.shared
+    @State private var showAll = false
+
+    private var activeSessions: [SessionDetail] {
+        sessionService.sessions.filter { $0.isActive }
+    }
+
+    private var recentSessions: [SessionDetail] {
+        sessionService.sessions.filter { !$0.isActive }
+    }
+
+    private var hasContent: Bool {
+        !sessionService.sessions.isEmpty || !detector.activeSessions.isEmpty || burnRateMetrics.hasSessionRate
+    }
+
+    private var activeCount: Int {
+        max(activeSessions.count, detector.totalProcessCount)
     }
 
     var body: some View {
-        if metrics.hasSessionRate {
+        if hasContent {
             VStack(spacing: 10) {
-                // Header row
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Burn Rate")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.primary)
+                // Header
+                SessionsSectionHeader(
+                    activeCount: activeCount,
+                    burnRateMetrics: burnRateMetrics
+                )
 
-                        Text("Current pace")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.secondary)
+                // Active session cards
+                if !activeSessions.isEmpty {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.1))
+                        .frame(height: 1)
+
+                    let visible = showAll ? activeSessions : Array(activeSessions.prefix(3))
+                    ForEach(visible) { session in
+                        SessionCard(session: session)
                     }
+                } else if !detector.activeSessions.isEmpty {
+                    // Fallback: show basic active sessions while JSONL data loads
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.1))
+                        .frame(height: 1)
 
-                    Spacer()
-
-                    HStack(spacing: 4) {
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(rateColor)
-
-                        Text(String(format: "%.1f%%/min", metrics.sessionRatePerMinute))
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(rateColor)
+                    ForEach(detector.activeSessions.prefix(3)) { session in
+                        BasicSessionRow(session: session)
                     }
                 }
 
-                // Mini progress bar showing estimated depletion
-                if let mins = cappedMinutes {
-                    VStack(spacing: 6) {
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(Color.secondary.opacity(0.15))
-
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [rateColor, rateColor.opacity(0.7)],
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        )
-                                    )
-                                    .frame(width: geometry.size.width * min(mins / 300.0, 1.0))
-                                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                                    .animation(.easeInOut(duration: 0.8), value: mins)
-                            }
-                        }
-                        .frame(height: 6)
-
-                        HStack {
-                            HStack(spacing: 4) {
-                                Image(systemName: "hourglass")
-                                    .font(.system(size: 8, weight: .medium))
-                                    .foregroundColor(.secondary)
-
-                                Text(timeRemainingText)
-                                    .font(.system(size: 9, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            }
-
-                            Spacer()
-
-                            if metrics.hasWeeklyRate {
-                                Text(String(format: "%.1f%%/hr weekly", metrics.weeklyRatePerHour))
-                                    .font(.system(size: 9, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            }
+                // Recent sessions
+                if !recentSessions.isEmpty {
+                    if !activeSessions.isEmpty || !detector.activeSessions.isEmpty {
+                        HStack(spacing: 6) {
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.1))
+                                .frame(height: 1)
+                            Text("Recent")
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundColor(.secondary.opacity(0.6))
+                            Rectangle()
+                                .fill(Color.secondary.opacity(0.1))
+                                .frame(height: 1)
                         }
                     }
+
+                    let visibleRecent = showAll ? recentSessions : Array(recentSessions.prefix(2))
+                    ForEach(visibleRecent) { session in
+                        SessionCard(session: session)
+                    }
+                }
+
+                // Show more / less toggle
+                let totalCount = sessionService.sessions.count
+                if totalCount > 3 {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showAll.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Text(showAll ? "Show less" : "Show all \(totalCount)")
+                                .font(.system(size: 9, weight: .medium))
+                            Image(systemName: showAll ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 7, weight: .semibold))
+                        }
+                        .foregroundColor(.secondary.opacity(0.7))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 2)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(12)
@@ -1013,6 +1024,8 @@ struct BurnRateSection: View {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
             )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
             .transition(.asymmetric(
                 insertion: .move(edge: .top).combined(with: .opacity),
                 removal: .opacity
@@ -1021,93 +1034,301 @@ struct BurnRateSection: View {
     }
 }
 
-// MARK: - Active Sessions Section
-struct ActiveSessionsSection: View {
-    @ObservedObject private var detector = ActiveSessionDetector.shared
+// MARK: - Sessions Section Header
+
+private struct SessionsSectionHeader: View {
+    let activeCount: Int
+    let burnRateMetrics: BurnRateMetrics
+
+    private var burnRateColor: Color {
+        guard let mins = burnRateMetrics.sessionMinutesRemaining else { return .orange }
+        if mins < 15 { return .red }
+        if mins < 30 { return .orange }
+        return Color(nsColor: .systemYellow)
+    }
+
+    private var timeRemainingText: String? {
+        guard let mins = burnRateMetrics.sessionMinutesRemaining else { return nil }
+        let capped = min(mins, 300)
+        if capped >= 300 { return "5h+ left" }
+        if capped < 60 { return String(format: "~%.0fm left", capped) }
+        let h = Int(capped / 60)
+        let m = Int(capped.truncatingRemainder(dividingBy: 60))
+        return "~\(h)h \(m)m left"
+    }
 
     var body: some View {
-        if !detector.activeSessions.isEmpty {
-            VStack(spacing: 8) {
-                // Header
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Active Sessions")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.primary)
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Sessions")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.primary)
 
-                        Text("\(detector.totalProcessCount) Claude Code process\(detector.totalProcessCount == 1 ? "" : "es")")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.secondary)
+                if activeCount > 0 {
+                    Text("\(activeCount) active")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer()
+
+            // Burn rate chip with time remaining
+            if burnRateMetrics.hasSessionRate {
+                VStack(alignment: .trailing, spacing: 1) {
+                    HStack(spacing: 3) {
+                        Image(systemName: "flame.fill")
+                            .font(.system(size: 8, weight: .medium))
+                        Text(String(format: "%.1f%%/min", burnRateMetrics.sessionRatePerMinute))
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
                     }
+                    .foregroundColor(burnRateColor)
+
+                    if let remaining = timeRemainingText {
+                        HStack(spacing: 2) {
+                            Image(systemName: "hourglass")
+                                .font(.system(size: 6, weight: .medium))
+                            Text(remaining)
+                                .font(.system(size: 8, weight: .medium))
+                        }
+                        .foregroundColor(burnRateColor.opacity(0.7))
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(burnRateColor.opacity(0.08))
+                )
+            }
+
+            if activeCount > 0 {
+                PulsingDot()
+            }
+        }
+    }
+}
+
+// MARK: - Session Card (Rich)
+
+private struct SessionCard: View {
+    let session: SessionDetail
+    @State private var isHovered = false
+
+    private var contextColor: Color {
+        let pct = session.contextPercentage
+        if pct >= 90 { return .red }
+        if pct >= 75 { return .orange }
+        if pct >= 50 { return Color(nsColor: .systemYellow) }
+        return .green
+    }
+
+    private var modelColor: Color {
+        switch session.modelShortName {
+        case "Opus": return .purple
+        case "Sonnet": return .blue
+        case "Haiku": return .teal
+        default: return .secondary
+        }
+    }
+
+    private var displayName: String {
+        if !session.slug.isEmpty {
+            return session.slug
+        }
+        return session.projectName
+    }
+
+    private var subtitle: String {
+        var parts: [String] = []
+        if !session.slug.isEmpty {
+            parts.append(session.projectName)
+        }
+        if let branch = session.gitBranch, !branch.isEmpty {
+            parts.append(branch)
+        }
+        return parts.joined(separator: " \u{00B7} ")
+    }
+
+    var body: some View {
+        Button(action: {
+            NSWorkspace.shared.open(URL(fileURLWithPath: session.projectPath))
+        }) {
+            VStack(alignment: .leading, spacing: 6) {
+                // Row 1: Status dot + Name + Model badge
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(session.isActive ? Color.green : Color.secondary.opacity(0.3))
+                        .frame(width: 6, height: 6)
+
+                    Text(displayName)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(session.isActive ? .primary : .primary.opacity(0.6))
+                        .lineLimit(1)
 
                     Spacer()
 
-                    // Pulsing live indicator
-                    HStack(spacing: 4) {
-                        Image(systemName: "terminal.fill")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.green)
-
-                        Circle()
-                            .fill(Color.green)
-                            .frame(width: 6, height: 6)
-                    }
+                    Text(session.modelShortName)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(modelColor)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(modelColor.opacity(0.12))
+                        )
                 }
 
-                // Divider
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.1))
-                    .frame(height: 1)
-
-                // Project list
-                ForEach(detector.activeSessions.prefix(5)) { session in
-                    HStack(spacing: 8) {
-                        Image(systemName: "folder.fill")
+                // Row 2: Project + Branch (if slug is shown as name)
+                if !subtitle.isEmpty {
+                    HStack(spacing: 0) {
+                        Spacer().frame(width: 12) // align with name above
+                        Text(subtitle)
                             .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.secondary.opacity(0.5))
-                            .frame(width: 12)
-
-                        Text(session.projectName)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(.primary.opacity(0.85))
+                            .foregroundColor(.secondary.opacity(0.7))
                             .lineLimit(1)
-
-                        Spacer()
-
-                        Text("\(session.sessionCount)")
-                            .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundColor(session.sessionCount > 1 ? .green : .secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(
-                                Capsule()
-                                    .fill(session.sessionCount > 1
-                                          ? Color.green.opacity(0.12)
-                                          : Color.secondary.opacity(0.08))
-                            )
                     }
-                    .padding(.vertical, 1)
                 }
 
-                if detector.activeSessions.count > 5 {
-                    HStack {
-                        Spacer()
-                        Text("+\(detector.activeSessions.count - 5) more")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(.secondary)
+                // Row 3: Context window progress bar
+                HStack(spacing: 0) {
+                    Spacer().frame(width: 12)
+                    VStack(spacing: 4) {
+                        GeometryReader { geometry in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Color.secondary.opacity(0.12))
+
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [contextColor, contextColor.opacity(0.7)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .frame(width: max(0, geometry.size.width * CGFloat(session.contextPercentage / 100.0)))
+                                    .animation(.easeInOut(duration: 0.6), value: session.contextPercentage)
+                            }
+                        }
+                        .frame(height: 5)
+
+                        // Token counts + percentage
+                        HStack {
+                            Text("\(SessionDetail.formatTokens(session.contextWindowTokens)) / \(SessionDetail.formatTokens(session.contextWindowLimit))")
+                                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                                .foregroundColor(.secondary.opacity(0.6))
+
+                            Spacer()
+
+                            Text(String(format: "%.0f%%", session.contextPercentage))
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                                .foregroundColor(contextColor)
+                        }
+                    }
+                }
+
+                // Row 4: Metadata (turns, duration, time ago)
+                HStack(spacing: 0) {
+                    Spacer().frame(width: 12)
+                    HStack(spacing: 8) {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.turn.down.right")
+                                .font(.system(size: 7, weight: .medium))
+                            Text("\(session.turnCount) turns")
+                                .font(.system(size: 8, weight: .medium))
+                        }
+                        .foregroundColor(.secondary.opacity(0.5))
+
+                        HStack(spacing: 3) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 7, weight: .medium))
+                            Text(session.formattedDuration)
+                                .font(.system(size: 8, weight: .medium))
+                        }
+                        .foregroundColor(.secondary.opacity(0.5))
+
+                        if !session.isActive {
+                            HStack(spacing: 3) {
+                                Image(systemName: "moon.fill")
+                                    .font(.system(size: 7, weight: .medium))
+                                Text(session.timeAgo)
+                                    .font(.system(size: 8, weight: .medium))
+                            }
+                            .foregroundColor(.secondary.opacity(0.4))
+                        }
+
                         Spacer()
                     }
                 }
             }
-            .padding(12)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isHovered ? Color.secondary.opacity(0.08) : Color.clear)
             )
-            .transition(.asymmetric(
-                insertion: .move(edge: .top).combined(with: .opacity),
-                removal: .opacity
-            ))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+}
+
+// MARK: - Basic Session Row (Fallback while JSONL loads)
+
+private struct BasicSessionRow: View {
+    let session: ActiveSession
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: {
+            NSWorkspace.shared.open(URL(fileURLWithPath: session.projectPath))
+        }) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color.green)
+                    .frame(width: 6, height: 6)
+
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(isHovered ? .green : .secondary.opacity(0.5))
+                    .frame(width: 12)
+
+                Text(session.projectName)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(isHovered ? .primary : .primary.opacity(0.85))
+                    .lineLimit(1)
+
+                Spacer()
+
+                if session.sessionCount > 1 {
+                    Text("\(session.sessionCount)")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.green.opacity(0.12))
+                        )
+                }
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color.secondary.opacity(0.08) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
         }
     }
 }

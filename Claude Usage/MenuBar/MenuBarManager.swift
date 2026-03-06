@@ -20,6 +20,7 @@ class MenuBarManager: NSObject, ObservableObject {
     @Published private(set) var burnRateMetrics: BurnRateMetrics = .zero
     private let burnRateTracker = BurnRateTracker.shared
     private let activeSessionDetector = ActiveSessionDetector.shared
+    private let sessionDataService = SessionDataService.shared
 
     // Track when refresh was last triggered (for distinguishing user vs auto refresh)
     private var lastRefreshTriggerTime: Date = .distantPast
@@ -180,6 +181,9 @@ class MenuBarManager: NSObject, ObservableObject {
         // Start active session detection
         activeSessionDetector.start()
 
+        // Start session data service (JSONL parsing for context window tracking)
+        sessionDataService.start()
+
         // Observe appearance changes
         observeAppearanceChanges()
 
@@ -199,6 +203,7 @@ class MenuBarManager: NSObject, ObservableObject {
         networkMonitor.stopMonitoring()
         autoStartService.stop()
         activeSessionDetector.stop()
+        sessionDataService.stop()
         cancellables.removeAll()  // Clean up Combine subscriptions
         refreshIntervalObserver?.invalidate()
         refreshIntervalObserver = nil
