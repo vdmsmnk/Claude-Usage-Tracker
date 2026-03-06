@@ -11,6 +11,7 @@ struct SessionDashboardView: View {
     @StateObject private var sessionService = SessionDataService.shared
     @State private var selectedSessionId: String?
     @State private var searchText = ""
+    @State private var isRefreshing = false
 
     private var filteredSessions: [SessionDetail] {
         if searchText.isEmpty { return sessionService.sessions }
@@ -49,11 +50,15 @@ struct SessionDashboardView: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    private func openGeneralSettings() {
+        NotificationCenter.default.post(name: .openSettings, object: SettingsSection.general)
+    }
+
     // MARK: - Session List Panel
 
     private var sessionListPanel: some View {
         VStack(spacing: 0) {
-            // Search bar
+            // Search bar + toolbar
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12))
@@ -69,6 +74,41 @@ struct SessionDashboardView: View {
                     }
                     .buttonStyle(.plain)
                 }
+
+                // Refresh button
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) { isRefreshing = true }
+                    sessionService.refresh()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        withAnimation(.easeInOut(duration: 0.3)) { isRefreshing = false }
+                    }
+                }) {
+                    ZStack {
+                        if isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(width: 12, height: 12)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .disabled(isRefreshing)
+                .help("dashboard.refresh".localized)
+
+                // Settings link
+                Button(action: { openGeneralSettings() }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .help("dashboard.open_settings".localized)
             }
             .padding(10)
             .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
@@ -91,6 +131,7 @@ struct SessionDashboardView: View {
                                     isSelected: selectedSessionId == session.id,
                                     onSelect: { selectedSessionId = session.id }
                                 )
+                                .id("\(session.id)-\(session.contextWindowTokens)-\(session.turnCount)")
                             }
                         } header: {
                             sectionHeader("dashboard.active".localized, count: activeSessions.count, color: .green)
@@ -105,6 +146,7 @@ struct SessionDashboardView: View {
                                     isSelected: selectedSessionId == session.id,
                                     onSelect: { selectedSessionId = session.id }
                                 )
+                                .id("\(session.id)-\(session.contextWindowTokens)-\(session.turnCount)")
                             }
                         } header: {
                             sectionHeader("sessions.recent".localized, count: recentSessions.count, color: .secondary)
@@ -290,6 +332,7 @@ private struct DashboardSessionRow: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(isSelected ? Color.accentColor.opacity(0.15) :
@@ -740,6 +783,7 @@ private struct FileOperationGroup: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 

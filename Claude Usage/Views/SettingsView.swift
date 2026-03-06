@@ -3,8 +3,12 @@ import UserNotifications
 
 /// Professional, native macOS Settings interface with multi-profile support
 struct SettingsView: View {
-    @State private var selectedSection: SettingsSection = .appearance
+    @State private var selectedSection: SettingsSection
     @StateObject private var profileManager = ProfileManager.shared
+
+    init(initialSection: SettingsSection = .appearance) {
+        _selectedSection = State(initialValue: initialSection)
+    }
 
     var body: some View {
         HSplitView {

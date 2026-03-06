@@ -500,6 +500,11 @@
 "general.autostart_toggle" = "Démarrage Automatique de Nouvelle Session";
 "general.autostart_description" = "Envoyer automatiquement un message lors de la réinitialisation de la session";
 "general.autostart_requirement" = "• Clé de session configurée dans Identifiants → onglet Claude.ai";
+"general.session_scan_title" = "Intervalle d'analyse des sessions";
+"general.session_scan_subtitle" = "Fréquence d'analyse des fichiers de session Claude Code";
+"general.session_scan_seconds" = "%d secondes";
+"general.session_scan_min" = "3s";
+"general.session_scan_max" = "30s";
 "general.notifications_title" = "Notifications";
 "general.notifications_subtitle" = "Recevoir des notifications sur les jalons d'utilisation";
 "general.connected" = "Connecté";

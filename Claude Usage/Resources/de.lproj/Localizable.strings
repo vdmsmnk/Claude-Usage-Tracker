@@ -522,6 +522,11 @@
 "general.autostart_toggle" = "Neue Sitzung Automatisch Starten";
 "general.autostart_description" = "Automatisch eine Nachricht senden, wenn die Sitzung zurückgesetzt wird";
 "general.autostart_requirement" = "• Sitzungsschlüssel im Tab 'Anmeldedaten → Claude.ai' konfiguriert";
+"general.session_scan_title" = "Sitzungs-Scan-Intervall";
+"general.session_scan_subtitle" = "Wie oft Claude Code Sitzungsdateien auf Änderungen gescannt werden";
+"general.session_scan_seconds" = "%d Sekunden";
+"general.session_scan_min" = "3s";
+"general.session_scan_max" = "30s";
 "general.notifications_title" = "Benachrichtigungen";
 "general.notifications_subtitle" = "Über Nutzungsmeilensteine benachrichtigt werden";
 "general.connected" = "Verbunden";

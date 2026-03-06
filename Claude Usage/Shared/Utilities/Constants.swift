@@ -54,6 +54,9 @@ enum Constants {
         static let apiIconOrder = "apiIconOrder"
         static let apiDisplayMode = "apiDisplayMode"
 
+        // Session scan interval
+        static let sessionScanInterval = "sessionScanInterval"
+
         // Localization
         static let appLanguage = "appLanguage"
     }
@@ -82,6 +85,7 @@ enum Constants {
     // Refresh intervals (in seconds)
     enum RefreshIntervals {
         static let menuBar: TimeInterval = 30        // 30 seconds
+        static let sessionScan: TimeInterval = 5     // 5 seconds
         static let widgetSmall: TimeInterval = 900   // 15 minutes
         static let widgetMedium: TimeInterval = 900  // 15 minutes
         static let widgetLarge: TimeInterval = 1800  // 30 minutes

@@ -520,6 +520,11 @@
 "general.autostart_toggle" = "Início Automático de Nova Sessão";
 "general.autostart_description" = "Enviar automaticamente uma mensagem quando a sessão for redefinida";
 "general.autostart_requirement" = "• Chave de sessão configurada em Credenciais → aba Claude.ai";
+"general.session_scan_title" = "Intervalo de verificação de sessões";
+"general.session_scan_subtitle" = "Frequência de verificação dos arquivos de sessão do Claude Code";
+"general.session_scan_seconds" = "%d segundos";
+"general.session_scan_min" = "3s";
+"general.session_scan_max" = "30s";
 "general.notifications_title" = "Notificações";
 "general.notifications_subtitle" = "Receber notificações sobre marcos de uso";
 "general.connected" = "Conectado";

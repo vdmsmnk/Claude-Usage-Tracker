@@ -169,7 +169,7 @@ final class SessionDataService: ObservableObject {
 
     private var fileCache: [String: (modDate: Date, detail: SessionDetail)] = [:]
     private var scanTimer: Timer?
-    private let scanInterval: TimeInterval = 15
+    private var intervalObserver: NSObjectProtocol?
 
     private init() {}
 
@@ -177,17 +177,48 @@ final class SessionDataService: ObservableObject {
 
     func start() {
         scan()
+        restartTimer()
+        observeScanIntervalChanges()
+    }
+
+    func stop() {
         scanTimer?.invalidate()
-        scanTimer = Timer.scheduledTimer(withTimeInterval: scanInterval, repeats: true) { [weak self] _ in
+        scanTimer = nil
+        if let observer = intervalObserver {
+            NotificationCenter.default.removeObserver(observer)
+            intervalObserver = nil
+        }
+    }
+
+    /// Force an immediate rescan
+    func refresh() {
+        scan()
+    }
+
+    private func restartTimer() {
+        scanTimer?.invalidate()
+        let interval = DataStore.shared.loadSessionScanInterval()
+        scanTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.scan()
             }
         }
     }
 
-    func stop() {
-        scanTimer?.invalidate()
-        scanTimer = nil
+    private func observeScanIntervalChanges() {
+        intervalObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let newInterval = DataStore.shared.loadSessionScanInterval()
+                if self.scanTimer?.timeInterval != newInterval {
+                    self.restartTimer()
+                }
+            }
+        }
     }
 
     // MARK: - Scanning

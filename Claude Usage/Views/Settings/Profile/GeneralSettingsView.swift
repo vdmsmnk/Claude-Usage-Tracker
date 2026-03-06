@@ -8,9 +8,10 @@
 import SwiftUI
 import UserNotifications
 
-/// General profile settings: Refresh interval, Auto-start, Notifications
+/// General profile settings: Refresh interval, Session scan interval, Auto-start, Notifications
 struct GeneralSettingsView: View {
     @StateObject private var profileManager = ProfileManager.shared
+    @State private var sessionScanInterval: TimeInterval = DataStore.shared.loadSessionScanInterval()
 
     var body: some View {
         ScrollView {
@@ -59,6 +60,45 @@ struct GeneralSettingsView: View {
                                     .foregroundColor(.secondary)
                                 Spacer()
                                 Text("general.refresh_max".localized)
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+
+                    // Session Scan Interval
+                    SettingsSectionCard(
+                        title: "general.session_scan_title".localized,
+                        subtitle: "general.session_scan_subtitle".localized
+                    ) {
+                        VStack(alignment: .leading, spacing: DesignTokens.Spacing.cardPadding) {
+                            HStack(spacing: DesignTokens.Spacing.iconText) {
+                                Image(systemName: "doc.text.magnifyingglass")
+                                    .font(.system(size: DesignTokens.Icons.standard))
+                                    .foregroundColor(DesignTokens.Colors.accent)
+                                    .frame(width: DesignTokens.Spacing.iconFrame)
+
+                                Text(String(format: "general.session_scan_seconds".localized, Int(sessionScanInterval)))
+                                    .font(DesignTokens.Typography.bodyMedium)
+
+                                Spacer()
+                            }
+
+                            Slider(
+                                value: $sessionScanInterval,
+                                in: 3...30,
+                                step: 1
+                            )
+                            .onChange(of: sessionScanInterval) { _, newValue in
+                                DataStore.shared.saveSessionScanInterval(newValue)
+                            }
+
+                            HStack {
+                                Text("general.session_scan_min".localized)
+                                    .font(DesignTokens.Typography.caption)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                Text("general.session_scan_max".localized)
                                     .font(DesignTokens.Typography.caption)
                                     .foregroundColor(.secondary)
                             }

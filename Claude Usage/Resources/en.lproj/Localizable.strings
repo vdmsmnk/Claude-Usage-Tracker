@@ -510,6 +510,11 @@
 "general.autostart_toggle" = "Auto-Start New Session";
 "general.autostart_description" = "Automatically send a message when session resets";
 "general.autostart_requirement" = "• Session key configured in Credentials → Claude.ai tab";
+"general.session_scan_title" = "Session Scan Interval";
+"general.session_scan_subtitle" = "How often to scan Claude Code session files for updates";
+"general.session_scan_seconds" = "%d seconds";
+"general.session_scan_min" = "3s";
+"general.session_scan_max" = "30s";
 "general.notifications_title" = "Notifications";
 "general.notifications_subtitle" = "Get notified about usage milestones";
 "general.connected" = "Connected";
@@ -733,6 +738,8 @@
 "dashboard.files_touched" = "Files Touched";
 "dashboard.files_count" = "%d unique files";
 "dashboard.files_more" = "+%d more...";
+"dashboard.refresh" = "Refresh sessions";
+"dashboard.open_settings" = "Session scan settings";
 
 /* Claude Code Info */
 "wizard.claude_code_info_title" = "Using Claude Code?";

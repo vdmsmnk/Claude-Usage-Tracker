@@ -152,6 +152,11 @@
 "general.autostart_toggle" = "새 세션 자동 시작";
 "general.autostart_description" = "세션 재설정 시 자동으로 메시지 전송";
 "general.autostart_requirement" = "• 자격 증명 → Claude.ai 탭에서 세션 키 구성됨";
+"general.session_scan_title" = "세션 스캔 간격";
+"general.session_scan_subtitle" = "Claude Code 세션 파일 업데이트 스캔 빈도";
+"general.session_scan_seconds" = "%d초";
+"general.session_scan_min" = "3초";
+"general.session_scan_max" = "30초";
 "general.notifications_title" = "알림";
 "general.notifications_subtitle" = "사용량 마일스톤 알림 받기";
 "general.connected" = "연결됨";

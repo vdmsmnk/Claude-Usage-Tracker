@@ -112,6 +112,17 @@ class DataStore: StorageProvider {
         return interval > 0 ? interval : Constants.RefreshIntervals.menuBar
     }
 
+    /// Saves session scan interval
+    func saveSessionScanInterval(_ interval: TimeInterval) {
+        defaults.set(interval, forKey: Constants.UserDefaultsKeys.sessionScanInterval)
+    }
+
+    /// Loads session scan interval
+    func loadSessionScanInterval() -> TimeInterval {
+        let interval = defaults.double(forKey: Constants.UserDefaultsKeys.sessionScanInterval)
+        return interval > 0 ? interval : Constants.RefreshIntervals.sessionScan
+    }
+
     /// Saves auto-start session preference
     func saveAutoStartSessionEnabled(_ enabled: Bool) {
         defaults.set(enabled, forKey: Constants.UserDefaultsKeys.autoStartSessionEnabled)

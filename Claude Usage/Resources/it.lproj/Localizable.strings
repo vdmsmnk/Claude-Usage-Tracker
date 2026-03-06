@@ -520,6 +520,11 @@
 "general.autostart_toggle" = "Avvio Automatico Nuova Sessione";
 "general.autostart_description" = "Invia automaticamente un messaggio quando la sessione si resetta";
 "general.autostart_requirement" = "• Chiave di sessione configurata in Credenziali → scheda Claude.ai";
+"general.session_scan_title" = "Intervallo scansione sessioni";
+"general.session_scan_subtitle" = "Frequenza di scansione dei file di sessione Claude Code";
+"general.session_scan_seconds" = "%d secondi";
+"general.session_scan_min" = "3s";
+"general.session_scan_max" = "30s";
 "general.notifications_title" = "Notifiche";
 "general.notifications_subtitle" = "Ricevi notifiche sulle tappe di utilizzo";
 "general.connected" = "Connesso";

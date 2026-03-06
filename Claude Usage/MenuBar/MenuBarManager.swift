@@ -76,6 +76,7 @@ class MenuBarManager: NSObject, ObservableObject {
 
     // Observer for display mode changes (single/multi profile)
     private var displayModeObserver: NSObjectProtocol?
+    private var openSettingsObserver: NSObjectProtocol?
 
     // MARK: - Image Caching (CPU Optimization)
     private var cachedImage: NSImage?
@@ -198,6 +199,9 @@ class MenuBarManager: NSObject, ObservableObject {
 
         // Observe display mode changes (single/multi profile)
         observeDisplayModeChanges()
+
+        // Observe open settings request (e.g., from session dashboard)
+        observeOpenSettings()
     }
 
     func cleanup() {
@@ -227,6 +231,10 @@ class MenuBarManager: NSObject, ObservableObject {
         if let displayModeObserver = displayModeObserver {
             NotificationCenter.default.removeObserver(displayModeObserver)
             self.displayModeObserver = nil
+        }
+        if let openSettingsObserver = openSettingsObserver {
+            NotificationCenter.default.removeObserver(openSettingsObserver)
+            self.openSettingsObserver = nil
         }
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
@@ -682,6 +690,19 @@ class MenuBarManager: NSObject, ObservableObject {
         }
     }
 
+    private func observeOpenSettings() {
+        openSettingsObserver = NotificationCenter.default.addObserver(
+            forName: .openSettings,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor in
+                let section = notification.object as? SettingsSection
+                self?.openSettings(section: section)
+            }
+        }
+    }
+
     private func observeDisplayModeChanges() {
         // Observe display mode changes (single/multi profile)
         displayModeObserver = NotificationCenter.default.addObserver(
@@ -989,6 +1010,10 @@ class MenuBarManager: NSObject, ObservableObject {
     }
 
     @objc private func preferencesClicked() {
+        openSettings(section: nil)
+    }
+
+    private func openSettings(section: SettingsSection?) {
         // Close the popover or detached window first
         closePopoverOrWindow()
 
@@ -1005,7 +1030,7 @@ class MenuBarManager: NSObject, ObservableObject {
             NSApp.setActivationPolicy(.regular)
 
             // Create and show the settings window programmatically
-            let settingsView = SettingsView()
+            let settingsView = section.map { SettingsView(initialSection: $0) } ?? SettingsView()
             let hostingController = NSHostingController(rootView: settingsView)
 
             let window = NSWindow(contentViewController: hostingController)
