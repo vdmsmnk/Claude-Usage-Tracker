@@ -91,6 +91,27 @@ enum Constants {
         static let widgetLarge: TimeInterval = 1800  // 30 minutes
     }
 
+    // Session scanning limits
+    enum SessionLimits {
+        static let maxSessions = 50
+        static let recentCutoffSeconds: TimeInterval = 2 * 3600  // 2 hours
+        static let largeFileThreshold: UInt64 = 5_000_000        // 5 MB
+        static let headReadSize = 20_000                          // 20 KB
+        static let tailReadSize = 100_000                         // 100 KB
+        static let contextWindowLimit = 200_000                   // 200K tokens
+        static let turnEstimationMinSize = 50_000
+        static let turnEstimationDivisor = 2_000
+    }
+
+    // Burn rate tracking
+    enum BurnRate {
+        static let maxSnapshots = 30
+        static let minElapsedSeconds: TimeInterval = 10
+        static let minRateThreshold: Double = 0.01
+        static let resetPreviousThreshold: Double = 5.0
+        static let resetCurrentThreshold: Double = 1.0
+    }
+
     // Session window (5 hours in seconds)
     static let sessionWindow: TimeInterval = 5 * 60 * 60
 

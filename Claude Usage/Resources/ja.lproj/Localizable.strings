@@ -522,6 +522,7 @@
 "general.autostart_toggle" = "新しいセッションを自動開始";
 "general.autostart_description" = "セッションがリセットされたときに自動的にメッセージを送信";
 "general.autostart_requirement" = "• 認証情報 → Claude.aiタブでセッションキーが構成されている";
+"general.autostart_requirements" = "要件：";
 "general.session_scan_title" = "セッションスキャン間隔";
 "general.session_scan_subtitle" = "Claude Codeセッションファイルの更新をスキャンする頻度";
 "general.session_scan_seconds" = "%d秒";
@@ -716,3 +717,5 @@
 "wizard.migrate_description_short" = "以前のアプリバージョンから古いプロファイルデータをインポート";
 "wizard.skip_migration" = "スキップ";
 "wizard.migration_skipped" = "スキップしました";
+
+"dashboard.no_results" = "一致するセッションがありません";

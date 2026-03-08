@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct SessionDashboardView: View {
-    @StateObject private var sessionService = SessionDataService.shared
+    @ObservedObject private var sessionService = SessionDataService.shared
     @State private var selectedSessionId: String?
     @State private var searchText = ""
     @State private var isRefreshing = false
@@ -155,12 +155,21 @@ struct SessionDashboardView: View {
 
                     if filteredSessions.isEmpty {
                         VStack(spacing: 8) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 24))
-                                .foregroundColor(.secondary.opacity(0.5))
-                            Text("dashboard.no_sessions".localized)
-                                .font(.system(size: 12))
-                                .foregroundColor(.secondary)
+                            if searchText.isEmpty {
+                                Image(systemName: "terminal")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.secondary.opacity(0.5))
+                                Text("dashboard.no_sessions".localized)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.secondary.opacity(0.5))
+                                Text("dashboard.no_results".localized)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 40)
@@ -187,6 +196,8 @@ struct SessionDashboardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(.regularMaterial)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(count)")
     }
 
     private var statsBar: some View {
@@ -261,6 +272,8 @@ private struct StatChip: View {
                     .foregroundColor(.secondary)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
 }
 
@@ -341,6 +354,8 @@ private struct DashboardSessionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(displayName), \(session.modelShortName), \(String(format: "%.0f%%", session.contextPercentage)) context, \(session.isActive ? "active" : session.timeAgo)")
     }
 }
 
@@ -490,6 +505,9 @@ private struct SessionDetailPanel: View {
                     }
                 }
                 .frame(height: 10)
+                .accessibilityElement()
+                .accessibilityLabel("Context window \(String(format: "%.0f%%", session.contextPercentage)) used")
+                .accessibilityValue("\(SessionDetail.formatTokens(session.contextWindowTokens)) of \(SessionDetail.formatTokens(session.contextWindowLimit)) tokens")
 
                 HStack {
                     Text("\(SessionDetail.formatTokens(session.contextWindowTokens)) / \(SessionDetail.formatTokens(session.contextWindowLimit))")
@@ -593,17 +611,7 @@ private struct SessionDetailPanel: View {
     }
 
     static func toolColor(for name: String) -> Color {
-        switch name {
-        case "Read": return .blue
-        case "Edit": return .orange
-        case "Write": return .green
-        case "Bash": return .red
-        case "Grep": return .purple
-        case "Glob": return .teal
-        case "Agent": return .indigo
-        case "LSP": return .mint
-        default: return .secondary
-        }
+        SessionDetail.toolColor(for: name)
     }
 
     // MARK: - Session Info
@@ -672,6 +680,8 @@ private struct MetricCard: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title): \(value)")
     }
 }
 
@@ -717,17 +727,7 @@ private struct ToolUsageRow: View {
     }
 
     private var toolIcon: String {
-        switch name {
-        case "Read": return "doc.text"
-        case "Edit": return "pencil"
-        case "Write": return "doc.badge.plus"
-        case "Bash": return "terminal"
-        case "Grep": return "magnifyingglass"
-        case "Glob": return "folder"
-        case "Agent": return "person.2"
-        case "LSP": return "chevron.left.forwardslash.chevron.right"
-        default: return "wrench"
-        }
+        SessionDetail.toolMetadata[name]?.icon ?? "wrench"
     }
 }
 
@@ -789,13 +789,7 @@ private struct FileOperationGroup: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(displayFiles, id: \.self) { file in
-                    Text(shortenPath(file))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                        .help(file)
+                    FilePathLink(displayPath: shortenPath(file), fullPath: file)
                 }
 
                 if hiddenCount > 0 {
@@ -808,6 +802,45 @@ private struct FileOperationGroup: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(operation): \(files.count) files")
+    }
+}
+
+// MARK: - File Path Link
+
+private struct FilePathLink: View {
+    let displayPath: String
+    let fullPath: String
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Text(displayPath)
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundColor(isHovered ? .accentColor : .secondary)
+            .underline(isHovered, color: .accentColor)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .help(fullPath)
+            .contentShape(Rectangle())
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .onTapGesture {
+                let url = URL(fileURLWithPath: fullPath)
+                if FileManager.default.fileExists(atPath: fullPath) {
+                    NSWorkspace.shared.open(url)
+                } else {
+                    // Reveal parent directory in Finder if file no longer exists
+                    NSWorkspace.shared.activateFileViewerSelecting([url.deletingLastPathComponent()])
+                }
+            }
+            .accessibilityLabel(displayPath)
+            .accessibilityHint("Opens file in default editor")
     }
 }
 
@@ -831,5 +864,7 @@ private struct InfoRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label): \(value)")
     }
 }

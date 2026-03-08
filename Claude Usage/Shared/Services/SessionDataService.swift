@@ -70,17 +70,27 @@ struct SessionDetail: Identifiable, Equatable, Sendable {
         toolUsage.filter { !Self.internalTools.contains($0.key) }.values.reduce(0, +)
     }
 
-    /// Shared tool metadata for icons and display labels
-    private static let toolMeta: [String: (label: String, icon: String)] = [
-        "Read": ("Read", "doc.text"),
-        "Edit": ("Edited", "pencil"),
-        "Write": ("Written", "doc.badge.plus"),
-        "Grep": ("Searched", "magnifyingglass"),
-        "Glob": ("Globbed", "folder"),
-        "Bash": ("Bash", "terminal"),
-        "Agent": ("Agent", "person.2"),
-        "LSP": ("LSP", "chevron.left.forwardslash.chevron.right"),
+    /// Shared tool metadata for icons, display labels, and colors (single source of truth)
+    struct ToolMeta {
+        let label: String
+        let icon: String
+        let color: Color
+    }
+
+    static let toolMetadata: [String: ToolMeta] = [
+        "Read": ToolMeta(label: "Read", icon: "doc.text", color: .blue),
+        "Edit": ToolMeta(label: "Edited", icon: "pencil", color: .orange),
+        "Write": ToolMeta(label: "Written", icon: "doc.badge.plus", color: .green),
+        "Grep": ToolMeta(label: "Searched", icon: "magnifyingglass", color: .purple),
+        "Glob": ToolMeta(label: "Globbed", icon: "folder", color: .teal),
+        "Bash": ToolMeta(label: "Bash", icon: "terminal", color: .red),
+        "Agent": ToolMeta(label: "Agent", icon: "person.2", color: .indigo),
+        "LSP": ToolMeta(label: "LSP", icon: "chevron.left.forwardslash.chevron.right", color: .mint),
     ]
+
+    static func toolColor(for name: String) -> Color {
+        toolMetadata[name]?.color ?? .secondary
+    }
 
     /// Files grouped by tool, derived dynamically from toolFiles keys
     var filesByOperation: [(tool: String, label: String, icon: String, files: [String])] {
@@ -90,8 +100,8 @@ struct SessionDetail: Identifiable, Equatable, Sendable {
             .filter { !$0.value.isEmpty }
             .sorted { (order.firstIndex(of: $0.key) ?? Int.max) < (order.firstIndex(of: $1.key) ?? Int.max) }
             .map { tool, files in
-                let meta = Self.toolMeta[tool] ?? (label: tool, icon: "wrench")
-                return (tool: tool, label: meta.label, icon: meta.icon, files: files)
+                let meta = Self.toolMetadata[tool]
+                return (tool: tool, label: meta?.label ?? tool, icon: meta?.icon ?? "wrench", files: files)
             }
     }
 
@@ -154,9 +164,7 @@ struct SessionDetail: Identifiable, Equatable, Sendable {
         return "\(tokens)"
     }
 
-    nonisolated static func contextLimit(for model: String) -> Int {
-        200_000
-    }
+    static let contextWindowLimit = Constants.SessionLimits.contextWindowLimit
 }
 
 // MARK: - Service
@@ -167,9 +175,10 @@ final class SessionDataService: ObservableObject {
 
     @Published private(set) var sessions: [SessionDetail] = []
 
-    private var fileCache: [String: (modDate: Date, detail: SessionDetail)] = [:]
+    private var fileCache: [String: CacheEntry] = [:]
     private var scanTimer: Timer?
     private var intervalObserver: NSObjectProtocol?
+    private var isScanning = false
 
     private init() {}
 
@@ -224,6 +233,9 @@ final class SessionDataService: ObservableObject {
     // MARK: - Scanning
 
     private func scan() {
+        guard !isScanning else { return }
+        isScanning = true
+
         let activeSessions = ActiveSessionDetector.shared.activeSessions
         let activeByEncoded: [String: Int] = Dictionary(
             activeSessions.map { ($0.projectPath.replacingOccurrences(of: "/", with: "-"), $0.sessionCount) },
@@ -236,27 +248,33 @@ final class SessionDataService: ObservableObject {
             await MainActor.run { [weak self] in
                 self?.fileCache = result.cache
                 self?.sessions = result.sessions
+                self?.isScanning = false
             }
         }
     }
 
     // MARK: - Scan Result
 
+    private struct CacheEntry: Sendable {
+        let modDate: Date
+        let detail: SessionDetail
+    }
+
     private struct ScanResult: Sendable {
         let sessions: [SessionDetail]
-        let cache: [String: (modDate: Date, detail: SessionDetail)]
+        let cache: [String: CacheEntry]
     }
 
     nonisolated private static func scanAllSessions(
         activeByEncoded: [String: Int],
-        fileCache: [String: (modDate: Date, detail: SessionDetail)]
+        fileCache: [String: CacheEntry]
     ) -> ScanResult {
         let homeDir = FileManager.default.homeDirectoryForCurrentUser
         let projectsDir = homeDir.appendingPathComponent(".claude/projects")
         let fm = FileManager.default
-        let recentCutoff = Date().addingTimeInterval(-2 * 3600)
+        let recentCutoff = Date().addingTimeInterval(-Constants.SessionLimits.recentCutoffSeconds)
 
-        var newCache = [String: (modDate: Date, detail: SessionDetail)]()
+        var newCache = [String: CacheEntry]()
         var allSessions: [SessionDetail] = []
 
         guard let projectDirs = try? fm.contentsOfDirectory(
@@ -300,7 +318,7 @@ final class SessionDataService: ObservableObject {
                 if let cached = fileCache[path], cached.modDate == entry.modDate {
                     var detail = cached.detail
                     detail.isActive = isActive
-                    newCache[path] = (entry.modDate, detail)
+                    newCache[path] = CacheEntry(modDate: entry.modDate, detail: detail)
                     allSessions.append(detail)
                     continue
                 }
@@ -308,7 +326,7 @@ final class SessionDataService: ObservableObject {
                 // Parse the file
                 if var detail = parseJSONLFile(at: entry.url) {
                     detail.isActive = isActive
-                    newCache[path] = (entry.modDate, detail)
+                    newCache[path] = CacheEntry(modDate: entry.modDate, detail: detail)
                     allSessions.append(detail)
                 }
             }
@@ -320,9 +338,8 @@ final class SessionDataService: ObservableObject {
             return a.lastActivityTime > b.lastActivityTime
         }
 
-        // Cap at 50 (popover shows fewer, dashboard shows all)
-        if allSessions.count > 50 {
-            allSessions = Array(allSessions.prefix(50))
+        if allSessions.count > Constants.SessionLimits.maxSessions {
+            allSessions = Array(allSessions.prefix(Constants.SessionLimits.maxSessions))
         }
 
         return ScanResult(sessions: allSessions, cache: newCache)
@@ -336,18 +353,29 @@ final class SessionDataService: ObservableObject {
               let fileSize = attrs[.size] as? UInt64 else { return nil }
 
         let content: String
-        if fileSize > 5_000_000 {
+        if fileSize > Constants.SessionLimits.largeFileThreshold {
             // Large file: read head + tail
             guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
             defer { try? handle.close() }
 
-            let headData = handle.readData(ofLength: 20_000)
+            let headData = handle.readData(ofLength: Constants.SessionLimits.headReadSize)
             let headStr = String(data: headData, encoding: .utf8) ?? ""
 
             let endOffset = handle.seekToEndOfFile()
-            let tailStart = max(0, endOffset - 100_000)
+            let tailSize = UInt64(Constants.SessionLimits.tailReadSize)
+            let tailStart = max(0, endOffset - tailSize)
             handle.seek(toFileOffset: tailStart)
-            let tailData = handle.readData(ofLength: Int(endOffset - tailStart))
+            var tailData = handle.readData(ofLength: Int(endOffset - tailStart))
+
+            // Skip past any partial UTF-8 character at the start of the tail chunk
+            // (the seek offset may land in the middle of a multi-byte character)
+            let maxSkip = min(4, tailData.count)
+            for i in 0..<maxSkip {
+                if tailData[i] & 0xC0 != 0x80 { // Not a continuation byte
+                    if i > 0 { tailData = tailData.dropFirst(i).withUnsafeBytes { Data($0) } }
+                    break
+                }
+            }
             let tailStr = String(data: tailData, encoding: .utf8) ?? ""
 
             content = headStr + "\n" + tailStr
@@ -357,7 +385,7 @@ final class SessionDataService: ObservableObject {
             content = str
         }
 
-        return parseContent(content, fileURL: url, estimateTurns: fileSize > 5_000_000, fileSize: Int(fileSize))
+        return parseContent(content, fileURL: url, estimateTurns: fileSize > Constants.SessionLimits.largeFileThreshold, fileSize: Int(fileSize))
     }
 
     nonisolated private static func parseContent(
@@ -443,12 +471,12 @@ final class SessionDataService: ObservableObject {
 
         guard let cwdPath = cwd else { return nil }
 
-        if estimateTurns && turnCount < 5 && fileSize > 50_000 {
-            turnCount = max(turnCount, fileSize / 2_000)
+        if estimateTurns && turnCount < 5 && fileSize > Constants.SessionLimits.turnEstimationMinSize {
+            turnCount = max(turnCount, fileSize / Constants.SessionLimits.turnEstimationDivisor)
         }
 
         let projectName = URL(fileURLWithPath: cwdPath).lastPathComponent
-        let limit = SessionDetail.contextLimit(for: model ?? "")
+        let limit = SessionDetail.contextWindowLimit
 
         return SessionDetail(
             id: fileURL.deletingPathExtension().lastPathComponent,

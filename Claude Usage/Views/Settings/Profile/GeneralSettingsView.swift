@@ -10,7 +10,7 @@ import UserNotifications
 
 /// General profile settings: Refresh interval, Session scan interval, Auto-start, Notifications
 struct GeneralSettingsView: View {
-    @StateObject private var profileManager = ProfileManager.shared
+    @ObservedObject private var profileManager = ProfileManager.shared
     @State private var sessionScanInterval: TimeInterval = DataStore.shared.loadSessionScanInterval()
 
     var body: some View {
@@ -126,7 +126,7 @@ struct GeneralSettingsView: View {
 
                             // Requirement
                             VStack(alignment: .leading, spacing: DesignTokens.Spacing.small) {
-                                Text("Requirements:")
+                                Text("general.autostart_requirements".localized)
                                     .font(DesignTokens.Typography.caption)
                                     .fontWeight(.medium)
                                     .foregroundColor(.secondary)

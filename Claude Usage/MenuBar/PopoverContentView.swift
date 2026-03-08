@@ -10,7 +10,7 @@ struct PopoverContentView: View {
 
     @State private var isRefreshing = false
     @State private var showInsights = false
-    @StateObject private var profileManager = ProfileManager.shared
+    @ObservedObject private var profileManager = ProfileManager.shared
 
     // Computed properties for multi-profile mode support
     private var displayUsage: ClaudeUsage {
@@ -82,7 +82,7 @@ struct PopoverContentView: View {
 // MARK: - Profile Switcher Compact (for header)
 
 struct ProfileSwitcherCompact: View {
-    @StateObject private var profileManager = ProfileManager.shared
+    @ObservedObject private var profileManager = ProfileManager.shared
     @State private var isHovered = false
     let onManageProfiles: () -> Void
 
@@ -185,7 +185,7 @@ struct ProfileSwitcherCompact: View {
 // MARK: - Profile Switcher Bar
 
 struct ProfileSwitcherBar: View {
-    @StateObject private var profileManager = ProfileManager.shared
+    @ObservedObject private var profileManager = ProfileManager.shared
     @State private var isHovered = false
     let onManageProfiles: () -> Void
 
@@ -366,7 +366,7 @@ struct SmartHeader: View {
     let onManageProfiles: () -> Void
     var clickedProfileId: UUID? = nil  // Profile ID that was clicked in multi-profile mode
 
-    @StateObject private var profileManager = ProfileManager.shared
+    @ObservedObject private var profileManager = ProfileManager.shared
 
     private var statusColor: Color {
         switch status.indicator.color {
@@ -495,7 +495,7 @@ struct SmartHeader: View {
 struct SmartUsageDashboard: View {
     let usage: ClaudeUsage
     let apiUsage: APIUsage?
-    @StateObject private var profileManager = ProfileManager.shared
+    @ObservedObject private var profileManager = ProfileManager.shared
 
     // Get the display mode from active profile's icon config
     private var showRemainingPercentage: Bool {

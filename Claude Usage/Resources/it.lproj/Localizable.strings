@@ -520,6 +520,7 @@
 "general.autostart_toggle" = "Avvio Automatico Nuova Sessione";
 "general.autostart_description" = "Invia automaticamente un messaggio quando la sessione si resetta";
 "general.autostart_requirement" = "• Chiave di sessione configurata in Credenziali → scheda Claude.ai";
+"general.autostart_requirements" = "Requisiti:";
 "general.session_scan_title" = "Intervallo scansione sessioni";
 "general.session_scan_subtitle" = "Frequenza di scansione dei file di sessione Claude Code";
 "general.session_scan_seconds" = "%d secondi";
@@ -714,3 +715,5 @@
 "wizard.migrate_description_short" = "Importa i tuoi vecchi dati dei profili dalla versione precedente dell'app";
 "wizard.skip_migration" = "Salta";
 "wizard.migration_skipped" = "Saltato";
+
+"dashboard.no_results" = "Nessuna sessione corrispondente";

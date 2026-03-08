@@ -152,6 +152,7 @@
 "general.autostart_toggle" = "새 세션 자동 시작";
 "general.autostart_description" = "세션 재설정 시 자동으로 메시지 전송";
 "general.autostart_requirement" = "• 자격 증명 → Claude.ai 탭에서 세션 키 구성됨";
+"general.autostart_requirements" = "요구 사항:";
 "general.session_scan_title" = "세션 스캔 간격";
 "general.session_scan_subtitle" = "Claude Code 세션 파일 업데이트 스캔 빈도";
 "general.session_scan_seconds" = "%d초";
@@ -776,3 +777,5 @@
 "wizard.migrate_description_short" = "이전 앱 버전에서 이전 프로필 데이터 가져오기";
 "wizard.skip_migration" = "건너뛰기";
 "wizard.migration_skipped" = "건너뜀";
+
+"dashboard.no_results" = "일치하는 세션 없음";

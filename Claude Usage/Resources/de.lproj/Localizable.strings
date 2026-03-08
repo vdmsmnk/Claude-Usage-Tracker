@@ -522,6 +522,7 @@
 "general.autostart_toggle" = "Neue Sitzung Automatisch Starten";
 "general.autostart_description" = "Automatisch eine Nachricht senden, wenn die Sitzung zurückgesetzt wird";
 "general.autostart_requirement" = "• Sitzungsschlüssel im Tab 'Anmeldedaten → Claude.ai' konfiguriert";
+"general.autostart_requirements" = "Voraussetzungen:";
 "general.session_scan_title" = "Sitzungs-Scan-Intervall";
 "general.session_scan_subtitle" = "Wie oft Claude Code Sitzungsdateien auf Änderungen gescannt werden";
 "general.session_scan_seconds" = "%d Sekunden";
@@ -716,3 +717,5 @@
 "wizard.migrate_description_short" = "Importieren Sie Ihre alten Profildaten aus der vorherigen App-Version";
 "wizard.skip_migration" = "Überspringen";
 "wizard.migration_skipped" = "Übersprungen";
+
+"dashboard.no_results" = "Keine passenden Sitzungen";

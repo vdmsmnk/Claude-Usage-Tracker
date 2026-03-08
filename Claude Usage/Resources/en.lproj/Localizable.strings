@@ -510,6 +510,7 @@
 "general.autostart_toggle" = "Auto-Start New Session";
 "general.autostart_description" = "Automatically send a message when session resets";
 "general.autostart_requirement" = "• Session key configured in Credentials → Claude.ai tab";
+"general.autostart_requirements" = "Requirements:";
 "general.session_scan_title" = "Session Scan Interval";
 "general.session_scan_subtitle" = "How often to scan Claude Code session files for updates";
 "general.session_scan_seconds" = "%d seconds";
@@ -715,6 +716,7 @@
 "dashboard.search" = "Search sessions...";
 "dashboard.active" = "Active";
 "dashboard.no_sessions" = "No sessions found";
+"dashboard.no_results" = "No matching sessions";
 "dashboard.select_session" = "Select a session";
 "dashboard.select_hint" = "Choose a session from the list to view details";
 "dashboard.stat_total" = "Total";

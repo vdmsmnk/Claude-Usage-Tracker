@@ -59,14 +59,8 @@ class MenuBarManager: NSObject, ObservableObject {
     // Track if we've handled the first profile switch (to allow returning to initial profile)
     private var hasHandledFirstProfileSwitch = false
 
-    // Observer for refresh interval changes
-    private var refreshIntervalObserver: NSKeyValueObservation?
-
     // Observer for appearance changes
     private var appearanceObserver: NSKeyValueObservation?
-
-    // Observer for icon style changes
-    private var iconStyleObserver: NSObjectProtocol?
 
     // Observer for icon configuration changes
     private var iconConfigObserver: NSObjectProtocol?
@@ -212,14 +206,8 @@ class MenuBarManager: NSObject, ObservableObject {
         activeSessionDetector.stop()
         sessionDataService.stop()
         cancellables.removeAll()  // Clean up Combine subscriptions
-        refreshIntervalObserver?.invalidate()
-        refreshIntervalObserver = nil
         appearanceObserver?.invalidate()
         appearanceObserver = nil
-        if let iconStyleObserver = iconStyleObserver {
-            NotificationCenter.default.removeObserver(iconStyleObserver)
-            self.iconStyleObserver = nil
-        }
         if let iconConfigObserver = iconConfigObserver {
             NotificationCenter.default.removeObserver(iconConfigObserver)
             self.iconConfigObserver = nil
@@ -572,6 +560,7 @@ class MenuBarManager: NSObject, ObservableObject {
     // MARK: - Icon Style: Battery (Classic)
 
     private func startAutoRefresh() {
+        refreshTimer?.invalidate()
         let interval = profileManager.activeProfile?.refreshInterval ?? 30.0
         refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.refreshUsage()
@@ -586,17 +575,6 @@ class MenuBarManager: NSObject, ObservableObject {
 
         // Start new timer with updated interval
         startAutoRefresh()
-    }
-
-    private func observeRefreshIntervalChanges() {
-        // Observe the same UserDefaults instance that DataStore uses
-        refreshIntervalObserver = dataStore.userDefaults.observe(\.refreshInterval, options: [.new]) { [weak self] _, change in
-            if let newValue = change.newValue, newValue > 0 {
-                DispatchQueue.main.async {
-                    self?.restartAutoRefresh()
-                }
-            }
-        }
     }
 
     private func observeAppearanceChanges() {
@@ -615,20 +593,6 @@ class MenuBarManager: NSObject, ObservableObject {
                 self.cachedImageKey = ""
                 self.updateStatusButton(button, usage: self.usage)
             }
-        }
-    }
-
-    private func observeIconStyleChanges() {
-        // Observe icon style changes from settings (now consolidated with menuBarIconConfigChanged)
-        iconStyleObserver = NotificationCenter.default.addObserver(
-            forName: .menuBarIconConfigChanged,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self = self else { return }
-            // Clear cache to force redraw with new style
-            self.cachedImageKey = ""
-            self.updateAllStatusBarIcons()
         }
     }
 
@@ -1221,22 +1185,27 @@ extension MenuBarManager: StatusBarUIManagerDelegate {
 
 // MARK: - NSWindowDelegate
 extension MenuBarManager: NSWindowDelegate {
+    /// Whether any managed window (other than detached popover) is still visible
+    private var hasVisibleManagedWindow: Bool {
+        let windows: [NSWindow?] = [settingsWindow, githubPromptWindow, dashboardWindow]
+        return windows.contains { $0?.isVisible == true }
+    }
+
     func windowWillClose(_ notification: Notification) {
         if let window = notification.object as? NSWindow {
             if window == settingsWindow {
-                // Hide dock icon again when settings window closes
-                NSApp.setActivationPolicy(.accessory)
                 settingsWindow = nil
             } else if window == detachedWindow {
-                // Clear detached window reference when closed
                 detachedWindow = nil
             } else if window == githubPromptWindow {
-                // Hide dock icon again when GitHub prompt window closes
-                NSApp.setActivationPolicy(.accessory)
                 githubPromptWindow = nil
             } else if window == dashboardWindow {
-                NSApp.setActivationPolicy(.accessory)
                 dashboardWindow = nil
+            }
+
+            // Only hide dock icon when no other managed windows remain visible
+            if !hasVisibleManagedWindow {
+                NSApp.setActivationPolicy(.accessory)
             }
         }
     }

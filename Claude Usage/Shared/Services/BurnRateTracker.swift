@@ -32,8 +32,8 @@ struct BurnRateMetrics {
         weeklyHoursRemaining: nil
     )
 
-    var hasSessionRate: Bool { sessionRatePerMinute > 0.01 }
-    var hasWeeklyRate: Bool { weeklyRatePerHour > 0.01 }
+    var hasSessionRate: Bool { sessionRatePerMinute > Constants.BurnRate.minRateThreshold }
+    var hasWeeklyRate: Bool { weeklyRatePerHour > Constants.BurnRate.minRateThreshold }
 }
 
 /// Tracks usage over time and computes burn rate metrics
@@ -43,9 +43,6 @@ final class BurnRateTracker {
 
     /// Ring buffer of recent snapshots per profile
     private var snapshots: [UUID: [UsageSnapshot]] = [:]
-
-    /// Maximum snapshots to keep per profile (at 30s intervals, 30 = 15 minutes of history)
-    private let maxSnapshots = 30
 
     private init() {}
 
@@ -64,6 +61,7 @@ final class BurnRateTracker {
         profileSnapshots.append(snapshot)
 
         // Trim to max size
+        let maxSnapshots = Constants.BurnRate.maxSnapshots
         if profileSnapshots.count > maxSnapshots {
             profileSnapshots.removeFirst(profileSnapshots.count - maxSnapshots)
         }
@@ -71,7 +69,8 @@ final class BurnRateTracker {
         // Detect session reset (percentage dropped significantly)
         if profileSnapshots.count >= 2 {
             let prev = profileSnapshots[profileSnapshots.count - 2]
-            if prev.sessionPercentage > 5 && snapshot.sessionPercentage < 1 {
+            if prev.sessionPercentage >= Constants.BurnRate.resetPreviousThreshold
+                && snapshot.sessionPercentage < Constants.BurnRate.resetCurrentThreshold {
                 // Session reset — clear history so old data doesn't skew burn rate
                 profileSnapshots = [snapshot]
             }
@@ -84,15 +83,14 @@ final class BurnRateTracker {
 
     /// Calculate burn rate metrics for a profile
     func metrics(for profileId: UUID) -> BurnRateMetrics {
-        guard let profileSnapshots = snapshots[profileId], profileSnapshots.count >= 3 else {
+        guard let profileSnapshots = snapshots[profileId], profileSnapshots.count >= 3,
+              let latest = profileSnapshots.last,
+              let oldest = profileSnapshots.first else {
             return .zero
         }
 
-        let latest = profileSnapshots.last!
-        let oldest = profileSnapshots.first!
-
         let elapsedSeconds = latest.timestamp.timeIntervalSince(oldest.timestamp)
-        guard elapsedSeconds > 10 else { return .zero } // Need at least 10 seconds of data
+        guard elapsedSeconds > Constants.BurnRate.minElapsedSeconds else { return .zero }
 
         let elapsedMinutes = elapsedSeconds / 60.0
 
@@ -102,7 +100,7 @@ final class BurnRateTracker {
 
         // Time remaining for session
         let sessionRemaining: TimeInterval? = {
-            guard sessionRate > 0.01 else { return nil }
+            guard sessionRate > Constants.BurnRate.minRateThreshold else { return nil }
             let percentLeft = 100.0 - latest.sessionPercentage
             guard percentLeft > 0 else { return nil }
             return percentLeft / sessionRate // minutes
@@ -115,7 +113,7 @@ final class BurnRateTracker {
 
         // Time remaining for weekly
         let weeklyRemaining: TimeInterval? = {
-            guard weeklyRate > 0.01 else { return nil }
+            guard weeklyRate > Constants.BurnRate.minRateThreshold else { return nil }
             let percentLeft = 100.0 - latest.weeklyPercentage
             guard percentLeft > 0 else { return nil }
             return percentLeft / weeklyRate // hours

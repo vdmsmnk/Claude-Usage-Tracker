@@ -500,6 +500,7 @@
 "general.autostart_toggle" = "Démarrage Automatique de Nouvelle Session";
 "general.autostart_description" = "Envoyer automatiquement un message lors de la réinitialisation de la session";
 "general.autostart_requirement" = "• Clé de session configurée dans Identifiants → onglet Claude.ai";
+"general.autostart_requirements" = "Prérequis :";
 "general.session_scan_title" = "Intervalle d'analyse des sessions";
 "general.session_scan_subtitle" = "Fréquence d'analyse des fichiers de session Claude Code";
 "general.session_scan_seconds" = "%d secondes";
@@ -694,3 +695,5 @@
 "wizard.migrate_description_short" = "Importer vos anciennes données de profils depuis la version précédente de l'application";
 "wizard.skip_migration" = "Ignorer";
 "wizard.migration_skipped" = "Ignoré";
+
+"dashboard.no_results" = "Aucune session correspondante";
