@@ -1255,6 +1255,17 @@ private struct SessionCard: View {
                             .foregroundColor(.secondary.opacity(0.55))
                         }
 
+                        if session.compactionCount > 0 {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.trianglehead.2.clockwise")
+                                    .font(.system(size: 8, weight: .medium))
+                                Text("\(session.compactionCount)×")
+                                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            }
+                            .foregroundColor(.orange.opacity(0.7))
+                            .help("sessions.compaction_tooltip".localized(with: session.autoCompactions, session.manualCompactions))
+                        }
+
                         Spacer()
                     }
                 }

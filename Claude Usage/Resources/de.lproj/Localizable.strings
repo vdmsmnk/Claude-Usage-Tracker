@@ -719,3 +719,8 @@
 "wizard.migration_skipped" = "Übersprungen";
 
 "dashboard.no_results" = "Keine passenden Sitzungen";
+"dashboard.compactions" = "Kompaktierungen";
+"dashboard.compactions_count" = "%d gesamt";
+"dashboard.compactions_auto" = "Auto";
+"dashboard.compactions_manual" = "Manuell";
+"sessions.compaction_tooltip" = "%d automatische, %d manuelle Kompaktierungen";

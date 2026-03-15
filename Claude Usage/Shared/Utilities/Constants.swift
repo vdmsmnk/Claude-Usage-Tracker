@@ -98,9 +98,29 @@ enum Constants {
         static let largeFileThreshold: UInt64 = 5_000_000        // 5 MB
         static let headReadSize = 20_000                          // 20 KB
         static let tailReadSize = 100_000                         // 100 KB
-        static let contextWindowLimit = 200_000                   // 200K tokens
+        static let defaultContextWindowLimit = 200_000            // 200K tokens (fallback)
         static let turnEstimationMinSize = 50_000
         static let turnEstimationDivisor = 2_000
+
+        /// Per-model context window limits (tokens).
+        /// Maps model family substrings to their context window size.
+        /// Order matters: first match wins, so put more specific patterns first.
+        private static let modelContextWindows: [(pattern: String, limit: Int)] = [
+            ("opus", 1_000_000),  // Claude Opus 4.6 — 1M
+            ("sonnet", 200_000),  // Claude Sonnet 4.6 — 200K
+            ("haiku", 200_000),   // Claude Haiku 4.5 — 200K
+        ]
+
+        /// Returns the context window limit for a given model identifier string.
+        static func contextWindowLimit(for model: String) -> Int {
+            let lowercased = model.lowercased()
+            for entry in modelContextWindows {
+                if lowercased.contains(entry.pattern) {
+                    return entry.limit
+                }
+            }
+            return defaultContextWindowLimit
+        }
     }
 
     // Burn rate tracking

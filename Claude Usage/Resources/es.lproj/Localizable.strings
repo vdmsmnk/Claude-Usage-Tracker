@@ -700,3 +700,8 @@
 "wizard.migration_skipped" = "Omitido";
 
 "dashboard.no_results" = "No hay sesiones coincidentes";
+"dashboard.compactions" = "Compactaciones";
+"dashboard.compactions_count" = "%d en total";
+"dashboard.compactions_auto" = "Auto";
+"dashboard.compactions_manual" = "Manual";
+"sessions.compaction_tooltip" = "%d automáticas, %d manuales";

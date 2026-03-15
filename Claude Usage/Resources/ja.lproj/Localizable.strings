@@ -719,3 +719,8 @@
 "wizard.migration_skipped" = "スキップしました";
 
 "dashboard.no_results" = "一致するセッションがありません";
+"dashboard.compactions" = "コンパクション";
+"dashboard.compactions_count" = "%d 件";
+"dashboard.compactions_auto" = "自動";
+"dashboard.compactions_manual" = "手動";
+"sessions.compaction_tooltip" = "自動 %d 件、手動 %d 件";

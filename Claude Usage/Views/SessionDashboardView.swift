@@ -131,7 +131,7 @@ struct SessionDashboardView: View {
                                     isSelected: selectedSessionId == session.id,
                                     onSelect: { selectedSessionId = session.id }
                                 )
-                                .id("\(session.id)-\(session.contextWindowTokens)-\(session.turnCount)")
+                                .id("\(session.id)-\(session.contextWindowTokens)-\(session.turnCount)-\(session.compactionCount)")
                             }
                         } header: {
                             sectionHeader("dashboard.active".localized, count: activeSessions.count, color: .green)
@@ -146,7 +146,7 @@ struct SessionDashboardView: View {
                                     isSelected: selectedSessionId == session.id,
                                     onSelect: { selectedSessionId = session.id }
                                 )
-                                .id("\(session.id)-\(session.contextWindowTokens)-\(session.turnCount)")
+                                .id("\(session.id)-\(session.contextWindowTokens)-\(session.turnCount)-\(session.compactionCount)")
                             }
                         } header: {
                             sectionHeader("sessions.recent".localized, count: recentSessions.count, color: .secondary)
@@ -335,9 +335,20 @@ private struct DashboardSessionRow: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(String(format: "%.0f%%", session.contextPercentage))
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                        .foregroundColor(session.contextColor)
+                    HStack(spacing: 4) {
+                        if session.compactionCount > 0 {
+                            HStack(spacing: 2) {
+                                Image(systemName: "arrow.trianglehead.2.clockwise")
+                                    .font(.system(size: 8))
+                                Text("\(session.compactionCount)")
+                                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            }
+                            .foregroundColor(.orange.opacity(0.7))
+                        }
+                        Text(String(format: "%.0f%%", session.contextPercentage))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(session.contextColor)
+                    }
                     Text(session.isActive ? session.formattedDuration : session.timeAgo)
                         .font(.system(size: 9))
                         .foregroundColor(.secondary)
@@ -377,6 +388,10 @@ private struct SessionDetailPanel: View {
                 detailHeader
                 metricsGrid
                 contextWindowSection
+
+                if session.compactionCount > 0 {
+                    compactionSection
+                }
 
                 if !session.sortedToolUsage.isEmpty {
                     toolUsageSection
@@ -533,6 +548,109 @@ private struct SessionDetailPanel: View {
         }
     }
 
+    // MARK: - Compaction History
+
+    private var compactionSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("dashboard.compactions".localized)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.primary)
+                Spacer()
+                Text("dashboard.compactions_count".localized(with: session.compactionCount))
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+
+            VStack(spacing: 10) {
+                // Auto vs Manual breakdown
+                HStack(spacing: 16) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.orange)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("\(session.autoCompactions)")
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .foregroundColor(.primary)
+                            Text("dashboard.compactions_auto".localized)
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("dashboard.compactions_auto".localized + ": \(session.autoCompactions)")
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "hand.tap")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.blue)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("\(session.manualCompactions)")
+                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .foregroundColor(.primary)
+                            Text("dashboard.compactions_manual".localized)
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("dashboard.compactions_manual".localized + ": \(session.manualCompactions)")
+
+                    Spacer()
+                }
+
+                // Timeline of compaction events
+                if !session.compactions.isEmpty {
+                    Divider()
+
+                    VStack(spacing: 4) {
+                        ForEach(Array(session.compactions.enumerated()), id: \.offset) { index, event in
+                            HStack(spacing: 8) {
+                                Image(systemName: event.trigger == .auto ? "arrow.clockwise" : "hand.tap")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundColor(event.trigger == .auto ? .orange : .blue)
+                                    .frame(width: 14)
+
+                                Text(Self.compactTimeFormatter.string(from: event.timestamp))
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                    .foregroundColor(.secondary)
+
+                                Spacer()
+
+                                Text(SessionDetail.formatTokens(event.preTokens) + " tokens")
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                    .foregroundColor(.primary.opacity(0.7))
+                            }
+                            .accessibilityElement(children: .combine)
+                            .accessibilityLabel("Compaction \(index + 1): \(event.trigger), \(SessionDetail.formatTokens(event.preTokens)) tokens")
+
+                            if index < session.compactions.count - 1 {
+                                Divider().padding(.leading, 22)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.5))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.secondary.opacity(0.1), lineWidth: 1)
+            )
+        }
+    }
+
+    private static let compactTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
+    }()
+
     // MARK: - Tool Usage
 
     private var toolUsageSection: some View {
@@ -636,6 +754,10 @@ private struct SessionDetailPanel: View {
                 InfoRow(label: "dashboard.info_input_tokens".localized, value: SessionDetail.formatTokens(session.totalInputTokens))
                 Divider().padding(.horizontal, 12)
                 InfoRow(label: "dashboard.info_output_tokens".localized, value: SessionDetail.formatTokens(session.totalOutputTokens))
+                if session.compactionCount > 0 {
+                    Divider().padding(.horizontal, 12)
+                    InfoRow(label: "dashboard.compactions".localized, value: "\(session.autoCompactions) auto, \(session.manualCompactions) manual")
+                }
             }
             .padding(.vertical, 4)
             .background(

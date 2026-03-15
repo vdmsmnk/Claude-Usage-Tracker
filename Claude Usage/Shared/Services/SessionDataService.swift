@@ -12,6 +12,18 @@ import SwiftUI
 
 // MARK: - Session Detail Model
 
+enum CompactionTrigger: String, Equatable, Sendable {
+    case auto
+    case manual
+    case unknown
+}
+
+struct CompactionEvent: Equatable, Sendable {
+    let timestamp: Date
+    let trigger: CompactionTrigger
+    let preTokens: Int
+}
+
 struct SessionDetail: Identifiable, Equatable, Sendable {
     let id: String
     let slug: String
@@ -28,7 +40,12 @@ struct SessionDetail: Identifiable, Equatable, Sendable {
     let totalInputTokens: Int
     let toolUsage: [String: Int]
     let toolFiles: [String: [String]]
+    let compactions: [CompactionEvent]
     var isActive: Bool
+
+    var compactionCount: Int { compactions.count }
+    var autoCompactions: Int { compactions.filter { $0.trigger == .auto }.count }
+    var manualCompactions: Int { compactions.filter { $0.trigger == .manual }.count }
 
     var contextPercentage: Double {
         guard contextWindowLimit > 0 else { return 0 }
@@ -164,7 +181,7 @@ struct SessionDetail: Identifiable, Equatable, Sendable {
         return "\(tokens)"
     }
 
-    static let contextWindowLimit = Constants.SessionLimits.contextWindowLimit
+    static let defaultContextWindowLimit = Constants.SessionLimits.defaultContextWindowLimit
 }
 
 // MARK: - Service
@@ -353,6 +370,7 @@ final class SessionDataService: ObservableObject {
               let fileSize = attrs[.size] as? UInt64 else { return nil }
 
         let content: String
+        var midCompactionLines: [String] = []
         if fileSize > Constants.SessionLimits.largeFileThreshold {
             // Large file: read head + tail
             guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
@@ -379,22 +397,75 @@ final class SessionDataService: ObservableObject {
             let tailStr = String(data: tailData, encoding: .utf8) ?? ""
 
             content = headStr + "\n" + tailStr
+
+            // Scan the skipped middle section for compact_boundary events.
+            // These are small system messages that would otherwise be lost.
+            let headEnd = UInt64(Constants.SessionLimits.headReadSize)
+            if tailStart > headEnd {
+                midCompactionLines = scanMiddleForCompactions(handle: handle, from: headEnd, to: tailStart)
+            }
         } else {
             guard let data = try? Data(contentsOf: url),
                   let str = String(data: data, encoding: .utf8) else { return nil }
             content = str
         }
 
-        return parseContent(content, fileURL: url, estimateTurns: fileSize > Constants.SessionLimits.largeFileThreshold, fileSize: Int(fileSize))
+        return parseContent(content, fileURL: url, estimateTurns: fileSize > Constants.SessionLimits.largeFileThreshold, fileSize: Int(fileSize), extraCompactionLines: midCompactionLines)
+    }
+
+    /// Scan the middle section of a large file for compact_boundary lines only.
+    /// Reads in chunks and extracts matching lines to avoid loading the full file.
+    nonisolated private static func scanMiddleForCompactions(
+        handle: FileHandle,
+        from startOffset: UInt64,
+        to endOffset: UInt64
+    ) -> [String] {
+        let marker = "compact_boundary".data(using: .utf8)!
+        let chunkSize = 256 * 1024 // 256 KB chunks
+        var results: [String] = []
+        var offset = startOffset
+
+        while offset < endOffset {
+            handle.seek(toFileOffset: offset)
+            let readSize = min(chunkSize, Int(endOffset - offset))
+            let data = handle.readData(ofLength: readSize)
+            guard !data.isEmpty else { break }
+
+            // Convert chunk to string, skip partial lines at boundaries
+            guard let chunk = String(data: data, encoding: .utf8) else {
+                offset += UInt64(readSize)
+                continue
+            }
+
+            let lines = chunk.components(separatedBy: "\n")
+            // Skip first and last partial lines (except at file boundaries)
+            let startIdx = offset == startOffset ? 0 : 1
+            let endIdx = (offset + UInt64(readSize)) >= endOffset ? lines.count : lines.count - 1
+
+            for i in startIdx..<endIdx where i < lines.count {
+                let line = lines[i]
+                if line.contains("compact_boundary") {
+                    results.append(line)
+                }
+            }
+
+            offset += UInt64(readSize)
+        }
+
+        return results
     }
 
     nonisolated private static func parseContent(
         _ content: String,
         fileURL: URL,
         estimateTurns: Bool,
-        fileSize: Int
+        fileSize: Int,
+        extraCompactionLines: [String] = []
     ) -> SessionDetail? {
-        let lines = content.components(separatedBy: "\n").filter { !$0.isEmpty }
+        let allContent = extraCompactionLines.isEmpty
+            ? content
+            : content + "\n" + extraCompactionLines.joined(separator: "\n")
+        let lines = allContent.components(separatedBy: "\n").filter { !$0.isEmpty }
         guard !lines.isEmpty else { return nil }
 
         var slug: String?
@@ -409,6 +480,7 @@ final class SessionDataService: ObservableObject {
         var turnCount = 0
         var toolCounts: [String: Int] = [:]
         var toolFileSets: [String: Set<String>] = [:]
+        var compactionEvents: [CompactionEvent] = []
 
         let dateFormatter = ISO8601DateFormatter()
         dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -433,6 +505,17 @@ final class SessionDataService: ObservableObject {
             }
 
             if type == "user" { turnCount += 1 }
+
+            // Detect compaction events
+            if type == "system", obj["subtype"] as? String == "compact_boundary" {
+                let meta = obj["compactMetadata"] as? [String: Any]
+                let triggerStr = meta?["trigger"] as? String ?? "unknown"
+                let trigger = CompactionTrigger(rawValue: triggerStr) ?? .unknown
+                let preTokens = meta?["preTokens"] as? Int ?? 0
+                if let ts = obj["timestamp"] as? String, let date = dateFormatter.date(from: ts) {
+                    compactionEvents.append(CompactionEvent(timestamp: date, trigger: trigger, preTokens: preTokens))
+                }
+            }
 
             // Latest assistant usage (overwrites previous — we want the last one)
             if type == "assistant", let message = obj["message"] as? [String: Any] {
@@ -476,7 +559,8 @@ final class SessionDataService: ObservableObject {
         }
 
         let projectName = URL(fileURLWithPath: cwdPath).lastPathComponent
-        let limit = SessionDetail.contextWindowLimit
+        let resolvedModel = model ?? "unknown"
+        let limit = Constants.SessionLimits.contextWindowLimit(for: resolvedModel)
 
         return SessionDetail(
             id: fileURL.deletingPathExtension().lastPathComponent,
@@ -494,6 +578,7 @@ final class SessionDataService: ObservableObject {
             totalInputTokens: totalInput,
             toolUsage: toolCounts,
             toolFiles: toolFileSets.mapValues { Array($0).sorted() },
+            compactions: compactionEvents,
             isActive: false
         )
     }

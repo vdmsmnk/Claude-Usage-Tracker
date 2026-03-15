@@ -697,3 +697,8 @@
 "wizard.migration_skipped" = "Ignoré";
 
 "dashboard.no_results" = "Aucune session correspondante";
+"dashboard.compactions" = "Compactions";
+"dashboard.compactions_count" = "%d au total";
+"dashboard.compactions_auto" = "Auto";
+"dashboard.compactions_manual" = "Manuel";
+"sessions.compaction_tooltip" = "%d automatiques, %d manuelles";

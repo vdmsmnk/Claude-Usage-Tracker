@@ -742,6 +742,11 @@
 "dashboard.files_more" = "+%d more...";
 "dashboard.refresh" = "Refresh sessions";
 "dashboard.open_settings" = "Session scan settings";
+"dashboard.compactions" = "Compactions";
+"dashboard.compactions_count" = "%d total";
+"dashboard.compactions_auto" = "Auto";
+"dashboard.compactions_manual" = "Manual";
+"sessions.compaction_tooltip" = "%d auto, %d manual compactions";
 
 /* Claude Code Info */
 "wizard.claude_code_info_title" = "Using Claude Code?";
