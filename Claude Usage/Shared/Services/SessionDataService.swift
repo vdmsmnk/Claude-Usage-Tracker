@@ -442,6 +442,11 @@ final class SessionDataService: ObservableObject {
             let startIdx = offset == startOffset ? 0 : 1
             let endIdx = (offset + UInt64(readSize)) >= endOffset ? lines.count : lines.count - 1
 
+            guard endIdx > startIdx else {
+                offset += UInt64(readSize)
+                continue
+            }
+
             for i in startIdx..<endIdx where i < lines.count {
                 let line = lines[i]
                 if line.contains("compact_boundary") {
