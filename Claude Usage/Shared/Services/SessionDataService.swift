@@ -420,7 +420,6 @@ final class SessionDataService: ObservableObject {
         from startOffset: UInt64,
         to endOffset: UInt64
     ) -> [String] {
-        let marker = "compact_boundary".data(using: .utf8)!
         let chunkSize = 256 * 1024 // 256 KB chunks
         var results: [String] = []
         var offset = startOffset

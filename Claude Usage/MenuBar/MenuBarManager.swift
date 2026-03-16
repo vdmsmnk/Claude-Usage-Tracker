@@ -703,8 +703,7 @@ class MenuBarManager: NSObject, ObservableObject {
         // Observe appearance changes on NSApp (fires less frequently than button)
         // This optimization reduces redundant redraws
         appearanceObserver = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, change in
-            guard let self = self,
-                  let button = self.statusItem?.button else { return }
+            guard let self = self else { return }
 
             // Cache the dark mode state to avoid querying it during layout
             let isDark = change.newValue?.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -713,7 +712,7 @@ class MenuBarManager: NSObject, ObservableObject {
                 self.cachedIsDarkMode = isDark
                 // Clear cache to force redraw with new appearance
                 self.cachedImageKey = ""
-                self.updateStatusButton(button, usage: self.usage)
+                self.updateAllStatusBarIcons()
             }
         }
     }
