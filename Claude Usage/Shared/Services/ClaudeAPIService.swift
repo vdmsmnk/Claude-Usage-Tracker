@@ -245,11 +245,23 @@ class ClaudeAPIService: APIServiceProtocol {
             request.httpMethod = "GET"
             request.timeoutInterval = 30
 
+            let startTime = Date()
             let (data, response): (Data, URLResponse)
             do {
                 (data, response) = try await URLSession.shared.data(for: request)
             } catch {
                 // Network errors
+                let duration = Date().timeIntervalSince(startTime)
+                NetworkLoggerService.shared.logRequest(
+                    url: url.absoluteString,
+                    method: "GET",
+                    requestBody: request.httpBody,
+                    responseData: nil,
+                    statusCode: nil,
+                    duration: duration,
+                    error: error
+                )
+
                 let appError = AppError(
                     code: .networkGenericError,
                     message: "Failed to connect to Claude API",
@@ -262,6 +274,8 @@ class ClaudeAPIService: APIServiceProtocol {
                 throw appError
             }
 
+            let duration = Date().timeIntervalSince(startTime)
+
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw AppError(
                     code: .apiInvalidResponse,
@@ -269,6 +283,17 @@ class ClaudeAPIService: APIServiceProtocol {
                     isRecoverable: true
                 )
             }
+
+            // Log to NetworkLoggerService
+            NetworkLoggerService.shared.logRequest(
+                url: url.absoluteString,
+                method: "GET",
+                requestBody: request.httpBody,
+                responseData: data,
+                statusCode: httpResponse.statusCode,
+                duration: duration,
+                error: nil
+            )
 
             switch httpResponse.statusCode {
             case 200:
@@ -373,8 +398,56 @@ class ClaudeAPIService: APIServiceProtocol {
     ///   - organizationId: The organization ID
     /// - Returns: ClaudeUsage data for the profile
     func fetchUsageData(sessionKey: String, organizationId: String) async throws -> ClaudeUsage {
-        let usageData = try await performRequest(endpoint: "/organizations/\(organizationId)/usage", sessionKey: sessionKey)
-        return try parseUsageResponse(usageData)
+        async let usageDataTask = performRequest(endpoint: "/organizations/\(organizationId)/usage", sessionKey: sessionKey)
+        async let overageDataTask: Data? = performRequest(endpoint: "/organizations/\(organizationId)/overage_spend_limit", sessionKey: sessionKey)
+        async let creditGrantTask: Data? = performRequest(endpoint: "/organizations/\(organizationId)/overage_credit_grant", sessionKey: sessionKey)
+
+        let usageData = try await usageDataTask
+        var claudeUsage = try parseUsageResponse(usageData)
+
+        if let data = try? await overageDataTask,
+           let overage = try? JSONDecoder().decode(OverageSpendLimitResponse.self, from: data),
+           overage.isEnabled == true {
+            claudeUsage.costUsed = overage.usedCredits
+            claudeUsage.costLimit = overage.monthlyCreditLimit
+            claudeUsage.costCurrency = overage.currency
+        }
+
+        if let creditData = try? await creditGrantTask,
+           let creditGrant = try? JSONDecoder().decode(OverageCreditGrantResponse.self, from: creditData) {
+            claudeUsage.overageBalance = creditGrant.remainingBalance
+            claudeUsage.overageBalanceCurrency = creditGrant.currency
+        }
+
+        return claudeUsage
+    }
+
+    /// Fetches usage data via OAuth access token (CLI credential flow)
+    func fetchUsageData(oauthAccessToken: String) async throws -> ClaudeUsage {
+        guard let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else {
+            throw AppError(code: .urlMalformed, message: "Invalid OAuth usage endpoint", isRecoverable: false)
+        }
+
+        var request = buildAuthenticatedRequest(url: url, auth: .cliOAuth(oauthAccessToken))
+        request.httpMethod = "GET"
+        request.timeoutInterval = 30
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw AppError(code: .apiInvalidResponse, message: "Invalid response from OAuth endpoint", isRecoverable: true)
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw AppError(
+                code: httpResponse.statusCode == 401 || httpResponse.statusCode == 403
+                    ? .apiUnauthorized : .apiGenericError,
+                message: "OAuth fetch failed (status \(httpResponse.statusCode))",
+                isRecoverable: true
+            )
+        }
+
+        return try parseUsageResponse(data)
     }
 
     /// Fetches real usage data from Claude's API
@@ -391,6 +464,7 @@ class ClaudeAPIService: APIServiceProtocol {
             // Use active profile's checkOverageLimitEnabled setting
             let checkOverage = ProfileManager.shared.activeProfile?.checkOverageLimitEnabled ?? true
             async let overageDataTask: Data? = checkOverage ? performRequest(endpoint: "/organizations/\(orgId)/overage_spend_limit", sessionKey: sessionKey) : nil
+            async let creditGrantTask: Data? = checkOverage ? performRequest(endpoint: "/organizations/\(orgId)/overage_credit_grant", sessionKey: sessionKey) : nil
 
             let usageData = try await usageDataTask
             var claudeUsage = try parseUsageResponse(usageData)
@@ -404,46 +478,92 @@ class ClaudeAPIService: APIServiceProtocol {
                 claudeUsage.costCurrency = overage.currency
             }
 
+            if checkOverage,
+               let creditData = try? await creditGrantTask,
+               let creditGrant = try? JSONDecoder().decode(OverageCreditGrantResponse.self, from: creditData) {
+                claudeUsage.overageBalance = creditGrant.remainingBalance
+                claudeUsage.overageBalanceCurrency = creditGrant.currency
+            }
+
             return claudeUsage
 
         case .cliOAuth:
-            // Use OAuth endpoint (no organization ID needed)
-            LoggingService.shared.log("ClaudeAPIService: Fetching usage via OAuth endpoint")
+            // The dedicated OAuth usage endpoint (api.anthropic.com/api/oauth/usage) is disabled.
+            // Instead, make a minimal Messages API call and extract usage from response headers.
+            LoggingService.shared.log("ClaudeAPIService: Fetching usage via Messages API headers (OAuth)")
 
-            guard let url = URL(string: "https://api.anthropic.com/api/oauth/usage") else {
+            guard let url = URL(string: "https://api.anthropic.com/v1/messages") else {
                 throw AppError(
                     code: .urlMalformed,
-                    message: "Invalid OAuth usage endpoint",
+                    message: "Invalid Messages API endpoint",
                     isRecoverable: false
                 )
             }
 
             var request = buildAuthenticatedRequest(url: url, auth: auth)
-            request.httpMethod = "GET"
+            request.httpMethod = "POST"
+            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             request.timeoutInterval = 30
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            // Minimal request: cheapest model, 1 token, to get rate limit headers
+            let body: [String: Any] = [
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 1,
+                "messages": [["role": "user", "content": "hi"]]
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+            let startTime = Date()
+            let (data, response): (Data, URLResponse)
+            do {
+                (data, response) = try await URLSession.shared.data(for: request)
+            } catch {
+                let duration = Date().timeIntervalSince(startTime)
+                NetworkLoggerService.shared.logRequest(
+                    url: url.absoluteString,
+                    method: "POST",
+                    requestBody: request.httpBody,
+                    responseData: nil,
+                    statusCode: nil,
+                    duration: duration,
+                    error: error
+                )
+                throw error
+            }
+
+            let duration = Date().timeIntervalSince(startTime)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw AppError(
                     code: .apiInvalidResponse,
-                    message: "Invalid response from OAuth endpoint",
+                    message: "Invalid response from Messages API",
                     isRecoverable: true
                 )
             }
+
+            // Log to NetworkLoggerService
+            NetworkLoggerService.shared.logRequest(
+                url: url.absoluteString,
+                method: "POST",
+                requestBody: request.httpBody,
+                responseData: data,
+                statusCode: httpResponse.statusCode,
+                duration: duration,
+                error: nil
+            )
 
             guard httpResponse.statusCode == 200 else {
                 let responsePreview = String(data: data, encoding: .utf8)?.prefix(200) ?? "Unable to read response"
                 throw AppError(
                     code: .apiUnauthorized,
-                    message: "OAuth authentication failed",
+                    message: "OAuth Messages API request failed",
                     technicalDetails: "Status: \(httpResponse.statusCode)\nResponse: \(responsePreview)",
                     isRecoverable: true,
                     recoverySuggestion: "Please re-sync your CLI account in Settings"
                 )
             }
 
-            return try parseUsageResponse(data)
+            return parseUsageFromRateLimitHeaders(httpResponse)
 
         case .consoleAPISession:
             // Console API is for billing/credits only, not usage data
@@ -471,11 +591,23 @@ class ClaudeAPIService: APIServiceProtocol {
 
         LoggingService.shared.logAPIRequest(endpoint)
 
+        let startTime = Date()
         let (data, response): (Data, URLResponse)
         do {
             (data, response) = try await URLSession.shared.data(for: request)
         } catch {
             // Network-level errors
+            let duration = Date().timeIntervalSince(startTime)
+            NetworkLoggerService.shared.logRequest(
+                url: url.absoluteString,
+                method: "GET",
+                requestBody: request.httpBody,
+                responseData: nil,
+                statusCode: nil,
+                duration: duration,
+                error: error
+            )
+
             LoggingService.shared.logAPIError(endpoint, error: error)
             let appError = AppError(
                 code: .networkGenericError,
@@ -488,6 +620,8 @@ class ClaudeAPIService: APIServiceProtocol {
             throw appError
         }
 
+        let duration = Date().timeIntervalSince(startTime)
+
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AppError(
                 code: .apiInvalidResponse,
@@ -498,6 +632,17 @@ class ClaudeAPIService: APIServiceProtocol {
         }
 
         LoggingService.shared.logAPIResponse(endpoint, statusCode: httpResponse.statusCode)
+
+        // Log to NetworkLoggerService
+        NetworkLoggerService.shared.logRequest(
+            url: url.absoluteString,
+            method: "GET",
+            requestBody: request.httpBody,
+            responseData: data,
+            statusCode: httpResponse.statusCode,
+            duration: duration,
+            error: nil
+        )
 
         // Log raw response if debug logging is enabled
         if DataStore.shared.loadDebugAPILoggingEnabled() {
@@ -659,6 +804,72 @@ class ClaudeAPIService: APIServiceProtocol {
         )
     }
 
+    // MARK: - Rate Limit Header Parsing
+
+    /// Parses usage data from Messages API rate limit response headers.
+    /// Headers use format: anthropic-ratelimit-unified-{window}-{field}
+    /// Utilization values are 0.0-1.0 (converted to 0-100 percentage).
+    private func parseUsageFromRateLimitHeaders(_ response: HTTPURLResponse) -> ClaudeUsage {
+        func headerDouble(_ name: String) -> Double? {
+            if let value = response.value(forHTTPHeaderField: name) {
+                return Double(value)
+            }
+            return nil
+        }
+
+        // Session (5h) usage — utilization is 0.0-1.0, convert to 0-100
+        let sessionUtilization = headerDouble("anthropic-ratelimit-unified-5h-utilization") ?? 0
+        var sessionPercentage = sessionUtilization * 100.0
+
+        let sessionResetTimestamp = headerDouble("anthropic-ratelimit-unified-5h-reset") ?? 0
+        let sessionResetTime = sessionResetTimestamp > 0
+            ? Date(timeIntervalSince1970: sessionResetTimestamp)
+            : Date().addingTimeInterval(5 * 3600)
+
+        // If the 5-hour window has already expired, the session has reset
+        if sessionResetTime < Date() {
+            sessionPercentage = 0.0
+        }
+
+        // Weekly (7d) usage
+        let weeklyUtilization = headerDouble("anthropic-ratelimit-unified-7d-utilization") ?? 0
+        let weeklyPercentage = weeklyUtilization * 100.0
+
+        let weeklyResetTimestamp = headerDouble("anthropic-ratelimit-unified-7d-reset") ?? 0
+        let weeklyResetTime = weeklyResetTimestamp > 0
+            ? Date(timeIntervalSince1970: weeklyResetTimestamp)
+            : Date().nextMonday1259pm()
+
+        // Per-model breakdowns not available in rate limit headers
+        let weeklyLimit = Constants.weeklyLimit
+        let weeklyTokens = Int(Double(weeklyLimit) * (weeklyPercentage / 100.0))
+
+        LoggingService.shared.log("ClaudeAPIService: Parsed usage from headers - session: \(String(format: "%.1f", sessionPercentage))%, weekly: \(String(format: "%.1f", weeklyPercentage))%")
+
+        return ClaudeUsage(
+            sessionTokensUsed: 0,
+            sessionLimit: 0,
+            sessionPercentage: sessionPercentage,
+            sessionResetTime: sessionResetTime,
+            weeklyTokensUsed: weeklyTokens,
+            weeklyLimit: weeklyLimit,
+            weeklyPercentage: weeklyPercentage,
+            weeklyResetTime: weeklyResetTime,
+            opusWeeklyTokensUsed: 0,
+            opusWeeklyPercentage: 0,
+            sonnetWeeklyTokensUsed: 0,
+            sonnetWeeklyPercentage: 0,
+            sonnetWeeklyResetTime: nil,
+            costUsed: nil,
+            costLimit: nil,
+            costCurrency: nil,
+            overageBalance: nil,
+            overageBalanceCurrency: nil,
+            lastUpdated: Date(),
+            userTimezone: .current
+        )
+    }
+
     // MARK: - Parsing Helpers
 
     /// Robust utilization parser that handles Int, Double, or String types
@@ -716,11 +927,23 @@ class ClaudeAPIService: APIServiceProtocol {
         ]
         conversationRequest.httpBody = try JSONSerialization.data(withJSONObject: conversationBody)
 
+        let startTime1 = Date()
         let (conversationData, conversationResponse) = try await URLSession.shared.data(for: conversationRequest)
+        let duration1 = Date().timeIntervalSince(startTime1)
 
         guard let httpResponse = conversationResponse as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
+
+        NetworkLoggerService.shared.logRequest(
+            url: conversationURL.absoluteString,
+            method: "POST",
+            requestBody: conversationRequest.httpBody,
+            responseData: conversationData,
+            statusCode: httpResponse.statusCode,
+            duration: duration1,
+            error: nil
+        )
 
         guard httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
             throw APIError.serverError(statusCode: httpResponse.statusCode)
@@ -749,11 +972,23 @@ class ClaudeAPIService: APIServiceProtocol {
         ]
         messageRequest.httpBody = try JSONSerialization.data(withJSONObject: messageBody)
 
-        let (_, messageResponse) = try await URLSession.shared.data(for: messageRequest)
+        let startTime2 = Date()
+        let (messageData, messageResponse) = try await URLSession.shared.data(for: messageRequest)
+        let duration2 = Date().timeIntervalSince(startTime2)
 
         guard let messageHTTPResponse = messageResponse as? HTTPURLResponse else {
             throw APIError.invalidResponse
         }
+
+        NetworkLoggerService.shared.logRequest(
+            url: messageURL.absoluteString,
+            method: "POST",
+            requestBody: messageRequest.httpBody,
+            responseData: messageData,
+            statusCode: messageHTTPResponse.statusCode,
+            duration: duration2,
+            error: nil
+        )
 
         guard messageHTTPResponse.statusCode == 200 else {
             throw APIError.serverError(statusCode: messageHTTPResponse.statusCode)
@@ -771,10 +1006,20 @@ class ClaudeAPIService: APIServiceProtocol {
         // Attempt to delete, but don't fail if deletion fails
         // The session is already initialized, which is the primary goal
         do {
-            let (_, deleteResponse) = try await URLSession.shared.data(for: deleteRequest)
+            let startTime3 = Date()
+            let (deleteData, deleteResponse) = try await URLSession.shared.data(for: deleteRequest)
+            let duration3 = Date().timeIntervalSince(startTime3)
+
             if let deleteHTTPResponse = deleteResponse as? HTTPURLResponse {
-                // Successfully deleted conversation - status code 200 or 204 expected
-                _ = deleteHTTPResponse.statusCode
+                NetworkLoggerService.shared.logRequest(
+                    url: deleteURL.absoluteString,
+                    method: "DELETE",
+                    requestBody: deleteRequest.httpBody,
+                    responseData: deleteData,
+                    statusCode: deleteHTTPResponse.statusCode,
+                    duration: duration3,
+                    error: nil
+                )
             }
         } catch {
             // Silently ignore deletion errors - session is already initialized

@@ -7,8 +7,8 @@
 
 import Foundation
 
-/// A single point-in-time usage snapshot
-struct UsageSnapshot {
+/// A single point-in-time usage snapshot for burn rate calculation
+struct BurnRateSnapshot {
     let timestamp: Date
     let sessionPercentage: Double
     let weeklyPercentage: Double
@@ -42,7 +42,7 @@ final class BurnRateTracker {
     static let shared = BurnRateTracker()
 
     /// Ring buffer of recent snapshots per profile
-    private var snapshots: [UUID: [UsageSnapshot]] = [:]
+    private var snapshots: [UUID: [BurnRateSnapshot]] = [:]
 
     private init() {}
 
@@ -52,7 +52,7 @@ final class BurnRateTracker {
     func record(profileId: UUID, sessionPercentage: Double, weeklyPercentage: Double) {
         var profileSnapshots = snapshots[profileId] ?? []
 
-        let snapshot = UsageSnapshot(
+        let snapshot = BurnRateSnapshot(
             timestamp: Date(),
             sessionPercentage: sessionPercentage,
             weeklyPercentage: weeklyPercentage

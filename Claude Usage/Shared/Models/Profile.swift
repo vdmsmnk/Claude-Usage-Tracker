@@ -18,6 +18,7 @@ struct Profile: Codable, Identifiable, Equatable {
     var organizationId: String?
     var apiSessionKey: String?
     var apiOrganizationId: String?
+    var apiSessionKeyExpiry: Date?
     var cliCredentialsJSON: String?
 
     // MARK: - CLI Account Sync Metadata
@@ -53,6 +54,7 @@ struct Profile: Codable, Identifiable, Equatable {
         organizationId: String? = nil,
         apiSessionKey: String? = nil,
         apiOrganizationId: String? = nil,
+        apiSessionKeyExpiry: Date? = nil,
         cliCredentialsJSON: String? = nil,
         hasCliAccount: Bool = false,
         cliAccountSyncedAt: Date? = nil,
@@ -73,6 +75,7 @@ struct Profile: Codable, Identifiable, Equatable {
         self.organizationId = organizationId
         self.apiSessionKey = apiSessionKey
         self.apiOrganizationId = apiOrganizationId
+        self.apiSessionKeyExpiry = apiSessionKeyExpiry
         self.cliCredentialsJSON = cliCredentialsJSON
         self.hasCliAccount = hasCliAccount
         self.cliAccountSyncedAt = cliAccountSyncedAt
@@ -98,25 +101,15 @@ struct Profile: Codable, Identifiable, Equatable {
     }
 
     /// True if profile has credentials that can fetch usage data (Claude.ai, CLI OAuth, or API Console)
+    /// Note: System keychain fallback is handled in ClaudeAPIService.getAuthentication() during actual API calls
     var hasUsageCredentials: Bool {
-        hasClaudeAI || hasAPIConsole || hasValidCLIOAuth || hasValidSystemCLIOAuth
+        hasClaudeAI || hasAPIConsole || hasValidCLIOAuth
     }
 
     /// True if profile has CLI OAuth credentials that are not expired
     var hasValidCLIOAuth: Bool {
         guard let cliJSON = cliCredentialsJSON else { return false }
-        // Check if not expired
         return !ClaudeCodeSyncService.shared.isTokenExpired(cliJSON)
-    }
-
-    /// True if system Keychain has valid CLI OAuth credentials (fallback)
-    var hasValidSystemCLIOAuth: Bool {
-        guard let systemCredentials = try? ClaudeCodeSyncService.shared.readSystemCredentials() else {
-            return false
-        }
-        // Check if not expired and has valid access token
-        return !ClaudeCodeSyncService.shared.isTokenExpired(systemCredentials) &&
-               ClaudeCodeSyncService.shared.extractAccessToken(from: systemCredentials) != nil
     }
 
     var hasAnyCredentials: Bool {
@@ -131,6 +124,7 @@ struct ProfileCredentials {
     var organizationId: String?
     var apiSessionKey: String?
     var apiOrganizationId: String?
+    var apiSessionKeyExpiry: Date?
     var cliCredentialsJSON: String?
 
     var hasClaudeAI: Bool {

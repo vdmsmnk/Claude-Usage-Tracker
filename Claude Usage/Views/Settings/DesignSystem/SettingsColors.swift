@@ -13,7 +13,7 @@ enum SettingsColors {
     // MARK: - Status Colors
 
     /// Success state (green)
-    static let success = Color.green
+    static let success = Color.adaptiveGreen
 
     /// Error state (red)
     static let error = Color.red
@@ -35,14 +35,14 @@ enum SettingsColors {
     /// Secondary elements
     static let secondary = Color.secondary
 
-    /// Card background
-    static let cardBackground = Color(nsColor: .controlBackgroundColor)
+    /// Card background — translucent to work with vibrancy
+    static let cardBackground = Color.primary.opacity(0.04)
 
-    /// Input field background
-    static let inputBackground = Color(nsColor: .textBackgroundColor)
+    /// Input field background — translucent to work with vibrancy
+    static let inputBackground = Color.primary.opacity(0.06)
 
-    /// Border color for inputs and cards
-    static let border = Color.gray.opacity(0.2)
+    /// Border color for inputs and cards — subtle for vibrancy
+    static let border = Color.primary.opacity(0.08)
 
     // MARK: - Feature-Specific Colors
 
@@ -58,7 +58,7 @@ enum SettingsColors {
     // MARK: - Threshold Colors (for usage indicators)
 
     /// Low usage (0-50%)
-    static let usageLow = Color.green
+    static let usageLow = Color.adaptiveGreen
 
     /// Medium usage (50-75%)
     static let usageMedium = Color.yellow

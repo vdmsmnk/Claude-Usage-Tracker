@@ -19,7 +19,11 @@ final class StatusBarUIManager {
     // Current display mode
     private var isMultiProfileMode: Bool = false
 
-    private var appearanceObserver: NSKeyValueObservation?
+    private var appearanceObservers: [NSKeyValueObservation] = []
+    private var appearanceDebounceTimer: Timer?
+
+    // Image cache to avoid redundant button.image assignments (which trigger KVO)
+    private var lastImageData: [ObjectIdentifier: Data] = [:]
 
     // Icon renderer for creating menu bar images
     private let renderer = MenuBarIconRenderer()
@@ -47,6 +51,8 @@ final class StatusBarUIManager {
                 button.target = target
                 // Set a temporary placeholder - will be updated with actual logo
                 button.title = ""
+            } else {
+                LoggingService.shared.logWarning("Status bar button is nil - screens: \(NSScreen.screens.count)")
             }
 
             // Use a special key to identify the default icon
@@ -60,6 +66,8 @@ final class StatusBarUIManager {
                 if let button = statusItem.button {
                     button.action = action
                     button.target = target
+                } else {
+                    LoggingService.shared.logWarning("Status bar button is nil for \(metricConfig.metricType.displayName) - screens: \(NSScreen.screens.count)")
                 }
 
                 statusItems[metricConfig.metricType] = statusItem
@@ -124,8 +132,8 @@ final class StatusBarUIManager {
     }
 
     func cleanup() {
-        appearanceObserver?.invalidate()
-        appearanceObserver = nil
+        appearanceObservers.forEach { $0.invalidate() }
+        appearanceObservers.removeAll()
 
         // Clean up single profile status items
         for (_, statusItem) in statusItems {
@@ -175,6 +183,8 @@ final class StatusBarUIManager {
                 button.action = action
                 button.target = target
                 button.title = ""
+            } else {
+                LoggingService.shared.logWarning("Multi-profile status bar button is nil - screens: \(NSScreen.screens.count)")
             }
             // Use a placeholder UUID for default logo
             multiProfileStatusItems[UUID()] = statusItem
@@ -187,6 +197,8 @@ final class StatusBarUIManager {
                 if let button = statusItem.button {
                     button.action = action
                     button.target = target
+                } else {
+                    LoggingService.shared.logWarning("Multi-profile status bar button is nil for \(profile.name) - screens: \(NSScreen.screens.count)")
                 }
 
                 multiProfileStatusItems[profile.id] = statusItem
@@ -216,7 +228,7 @@ final class StatusBarUIManager {
             let showRemaining = profile.iconConfig.showRemainingPercentage
 
             // Calculate percentages
-            let sessionUsed = usage.sessionPercentage
+            let sessionUsed = usage.effectiveSessionPercentage
             let weekUsed = usage.weeklyPercentage
 
             let sessionDisplay = UsageStatusCalculator.getDisplayPercentage(
@@ -228,18 +240,48 @@ final class StatusBarUIManager {
                 showRemaining: showRemaining
             )
 
+            let sessionElapsed = UsageStatusCalculator.elapsedFraction(
+                resetTime: usage.sessionResetTime,
+                duration: Constants.sessionWindow,
+                showRemaining: false
+            )
+            let weekElapsed = UsageStatusCalculator.elapsedFraction(
+                resetTime: usage.weeklyResetTime,
+                duration: Constants.weeklyWindow,
+                showRemaining: false
+            )
             let sessionStatus = UsageStatusCalculator.calculateStatus(
                 usedPercentage: sessionUsed,
-                showRemaining: showRemaining
+                showRemaining: showRemaining,
+                elapsedFraction: config.usePaceColoring ? sessionElapsed : nil
             )
             let weekStatus = UsageStatusCalculator.calculateStatus(
                 usedPercentage: weekUsed,
-                showRemaining: showRemaining
+                showRemaining: showRemaining,
+                elapsedFraction: config.usePaceColoring ? weekElapsed : nil
             )
 
             // Use multi-profile config's useSystemColor as monochrome mode
             // When useSystemColor is ON, icons will be white (like single-profile monochrome)
             let useMonochrome = config.useSystemColor
+
+            // Calculate time marker fractions for multi-profile display
+            let sessionMarker: CGFloat? = config.showTimeMarker
+                ? sessionElapsed.map { CGFloat(showRemaining ? 1.0 - $0 : $0) }
+                : nil
+            let weekMarker: CGFloat? = config.showTimeMarker
+                ? weekElapsed.map { CGFloat(showRemaining ? 1.0 - $0 : $0) }
+                : nil
+
+            // Compute pace status for multi-profile rendering
+            let sessionPaceStatus: PaceStatus? = {
+                guard config.showPaceMarker, let elapsed = sessionElapsed else { return nil }
+                return PaceStatus.calculate(usedPercentage: sessionUsed, elapsedFraction: elapsed)
+            }()
+            let weekPaceStatus: PaceStatus? = {
+                guard config.showPaceMarker, let elapsed = weekElapsed else { return nil }
+                return PaceStatus.calculate(usedPercentage: weekUsed, elapsedFraction: elapsed)
+            }()
 
             // Create icon based on selected style
             let image: NSImage
@@ -254,7 +296,12 @@ final class StatusBarUIManager {
                         profileName: profile.name,
                         monochromeMode: useMonochrome,
                         isDarkMode: menuBarIsDark,
-                        useSystemColor: false
+                        useSystemColor: false,
+                        sessionTimeMarker: sessionMarker,
+                        weekTimeMarker: config.showWeek ? weekMarker : nil,
+                        sessionPaceStatus: sessionPaceStatus,
+                        weekPaceStatus: config.showWeek ? weekPaceStatus : nil,
+                        showPaceMarker: config.showPaceMarker
                     )
                 } else {
                     image = renderer.createConcentricIcon(
@@ -265,7 +312,12 @@ final class StatusBarUIManager {
                         profileInitial: String(profile.name.prefix(1)),
                         monochromeMode: useMonochrome,
                         isDarkMode: menuBarIsDark,
-                        useSystemColor: false
+                        useSystemColor: false,
+                        sessionTimeMarker: sessionMarker,
+                        weekTimeMarker: config.showWeek ? weekMarker : nil,
+                        sessionPaceStatus: sessionPaceStatus,
+                        weekPaceStatus: config.showWeek ? weekPaceStatus : nil,
+                        showPaceMarker: config.showPaceMarker
                     )
                 }
             case .progressBar:
@@ -277,7 +329,12 @@ final class StatusBarUIManager {
                     profileName: config.showProfileLabel ? profile.name : nil,
                     monochromeMode: useMonochrome,
                     isDarkMode: menuBarIsDark,
-                    useSystemColor: false
+                    useSystemColor: false,
+                    sessionTimeMarker: sessionMarker,
+                    weekTimeMarker: config.showWeek ? weekMarker : nil,
+                    sessionPaceStatus: sessionPaceStatus,
+                    weekPaceStatus: config.showWeek ? weekPaceStatus : nil,
+                    showPaceMarker: config.showPaceMarker
                 )
             case .compact:
                 image = renderer.createCompactDot(
@@ -286,20 +343,51 @@ final class StatusBarUIManager {
                     profileInitial: config.showProfileLabel ? String(profile.name.prefix(1)) : nil,
                     monochromeMode: useMonochrome,
                     isDarkMode: menuBarIsDark,
-                    useSystemColor: false
+                    useSystemColor: false,
+                    paceStatus: sessionPaceStatus,
+                    showPaceMarker: config.showPaceMarker
+                )
+            case .percentage:
+                image = renderer.createMultiProfilePercentage(
+                    sessionPercentage: sessionDisplay,
+                    weekPercentage: config.showWeek ? weekDisplay : nil,
+                    sessionStatus: sessionStatus,
+                    weekStatus: weekStatus,
+                    profileName: config.showProfileLabel ? profile.name : nil,
+                    monochromeMode: useMonochrome,
+                    isDarkMode: menuBarIsDark,
+                    useSystemColor: false,
+                    sessionPaceStatus: sessionPaceStatus,
+                    weekPaceStatus: config.showWeek ? weekPaceStatus : nil,
+                    showPaceMarker: config.showPaceMarker
                 )
             }
 
+            image.isTemplate = useMonochrome && !config.showPaceMarker
             button.image = image
-            // Template mode only for monochrome (lets macOS handle color adaptation)
-            // Non-monochrome needs explicit colors for status indicators
-            button.image?.isTemplate = useMonochrome
         }
     }
 
     /// Checks if currently in multi-profile mode
     var isInMultiProfileMode: Bool {
         return isMultiProfileMode
+    }
+
+    /// Checks if status bar has at least one valid button (for headless mode detection)
+    var hasValidStatusBar: Bool {
+        // Check single-profile status items
+        for (_, statusItem) in statusItems {
+            if statusItem.button != nil {
+                return true
+            }
+        }
+        // Check multi-profile status items
+        for (_, statusItem) in multiProfileStatusItems {
+            if statusItem.button != nil {
+                return true
+            }
+        }
+        return false
     }
 
     /// Get button for a specific profile (multi-profile mode)
@@ -339,8 +427,8 @@ final class StatusBarUIManager {
                 // Get actual menu bar appearance from the button
                 let menuBarIsDark = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
                 let logoImage = renderer.createDefaultAppLogo(isDarkMode: menuBarIsDark)
-                button.image = logoImage
-                button.image?.isTemplate = true  // Let macOS handle the color
+                logoImage.isTemplate = true  // Let macOS handle the color
+                setButtonImage(button, image: logoImage)
             }
             return
         }
@@ -363,15 +451,14 @@ final class StatusBarUIManager {
                 usage: usage,
                 apiUsage: apiUsage,
                 isDarkMode: menuBarIsDark,
-                monochromeMode: config.monochromeMode,
+                colorMode: config.colorMode,
+                singleColorHex: config.singleColorHex,
                 showIconName: config.showIconNames,
                 showNextSessionTime: metricConfig.showNextSessionTime
             )
 
+            image.isTemplate = config.colorMode == .monochrome && !config.showPaceMarker
             button.image = image
-            // Template mode only for monochrome (lets macOS handle color adaptation)
-            // Non-monochrome needs explicit colors for status indicators
-            button.image?.isTemplate = config.monochromeMode
         }
     }
 
@@ -403,15 +490,14 @@ final class StatusBarUIManager {
             usage: usage,
             apiUsage: apiUsage,
             isDarkMode: menuBarIsDark,
-            monochromeMode: config.monochromeMode,
+            colorMode: config.colorMode,
+            singleColorHex: config.singleColorHex,
             showIconName: config.showIconNames,
             showNextSessionTime: metricConfig.showNextSessionTime
         )
 
+        image.isTemplate = config.colorMode == .monochrome && !config.showPaceMarker
         button.image = image
-        // Template mode only for monochrome (lets macOS handle color adaptation)
-        // Non-monochrome needs explicit colors for status indicators
-        button.image?.isTemplate = config.monochromeMode
     }
 
     /// Get button for a specific metric (used for popover positioning)
@@ -443,8 +529,45 @@ final class StatusBarUIManager {
 
     // MARK: - Appearance Observation
 
+    private var lastObservedAppearanceName: NSAppearance.Name?
+
     private func observeAppearanceChanges() {
-        appearanceObserver = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+        appearanceObservers.forEach { $0.invalidate() }
+        appearanceObservers.removeAll()
+
+        // IMPORTANT: Do NOT observe per-button effectiveAppearance.
+        // Setting button.image triggers effectiveAppearance KVO on the button,
+        // which causes an infinite redraw loop.
+        let appObserver = NSApp.observe(\.effectiveAppearance, options: [.new]) { [weak self] _, change in
+            guard let self = self else { return }
+            let newName = change.newValue?.name
+            guard newName != self.lastObservedAppearanceName else { return }
+            self.lastObservedAppearanceName = newName
+            // Clear image cache so next update re-renders with new appearance
+            self.lastImageData.removeAll()
+            self.delegate?.statusBarAppearanceDidChange()
+        }
+        appearanceObservers.append(appObserver)
+    }
+
+    /// Only sets button.image if the image data actually changed.
+    /// This prevents triggering effectiveAppearance KVO when the image is identical.
+    private func setButtonImage(_ button: NSStatusBarButton, image: NSImage) {
+        let buttonId = ObjectIdentifier(button)
+        guard let newData = image.tiffRepresentation else {
+            button.image = image
+            return
+        }
+        if lastImageData[buttonId] == newData { return }
+        lastImageData[buttonId] = newData
+        button.image = image
+    }
+
+    /// Debounces appearance change notifications so multiple displays/buttons
+    /// coalesce into a single delegate callback
+    private func scheduleAppearanceUpdate() {
+        appearanceDebounceTimer?.invalidate()
+        appearanceDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.15, repeats: false) { [weak self] _ in
             self?.delegate?.statusBarAppearanceDidChange()
         }
     }

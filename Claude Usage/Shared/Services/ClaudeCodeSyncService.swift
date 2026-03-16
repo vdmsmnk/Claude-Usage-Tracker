@@ -12,17 +12,90 @@ import Security
 class ClaudeCodeSyncService {
     static let shared = ClaudeCodeSyncService()
 
+    /// Cached resolved keychain service name (cleared per app session)
+    private var resolvedServiceName: String?
+
     private init() {}
 
-    // MARK: - System Keychain Access
+    // MARK: - System Credentials Access (Fallback Chain)
+
+    /// Reads Claude Code credentials using a fallback chain:
+    /// 1. ~/.claude/.credentials.json (always complete, not subject to keychain truncation)
+    /// 2. System Keychain (may be truncated for large payloads >2KB)
+    /// 3. Regex extraction of accessToken from truncated keychain data (last resort)
+    func readSystemCredentials() throws -> String? {
+        // 1. Try credentials file first (most reliable)
+        if let fileJSON = readCredentialsFile() {
+            LoggingService.shared.log("Read credentials from .credentials.json file")
+            return fileJSON
+        }
+
+        // 2. Try keychain
+        let keychainData = try readKeychainCredentials()
+
+        guard let rawJSON = keychainData else {
+            // No credentials anywhere
+            return nil
+        }
+
+        // 3. Validate keychain JSON
+        if let data = rawJSON.data(using: .utf8),
+           let _ = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return rawJSON
+        }
+
+        // 4. Keychain data is truncated/invalid — try regex extraction
+        LoggingService.shared.log("Keychain JSON is invalid (likely truncated), attempting regex extraction")
+        if let token = extractAccessTokenViaRegex(from: rawJSON) {
+            let minimalJSON = "{\"claudeAiOauth\":{\"accessToken\":\"\(token)\"}}"
+            LoggingService.shared.log("Built minimal credentials from regex-extracted token")
+            return minimalJSON
+        }
+
+        // 5. All attempts failed
+        throw ClaudeCodeError.invalidJSON
+    }
+
+    // MARK: - Private Credential Sources
+
+    /// Reads credentials from ~/.claude/.credentials.json or ~/.claude/credentials.json file
+    private func readCredentialsFile() -> String? {
+        let paths = [
+            Constants.ClaudePaths.claudeDirectory.appendingPathComponent(".credentials.json"),
+            Constants.ClaudePaths.claudeDirectory.appendingPathComponent("credentials.json")
+        ]
+
+        for fileURL in paths {
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+
+            guard let data = try? Data(contentsOf: fileURL),
+                  let jsonString = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !jsonString.isEmpty else {
+                LoggingService.shared.log("credentials file exists but could not be read: \(fileURL.lastPathComponent)")
+                continue
+            }
+
+            // Validate it's actually valid JSON
+            guard let _ = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                LoggingService.shared.log("credentials file contains invalid JSON: \(fileURL.lastPathComponent)")
+                continue
+            }
+
+            LoggingService.shared.log("Read credentials from \(fileURL.lastPathComponent)")
+            return jsonString
+        }
+
+        return nil
+    }
 
     /// Reads Claude Code credentials from system Keychain using security command
-    func readSystemCredentials() throws -> String? {
+    private func readKeychainCredentials() throws -> String? {
+        let serviceName = resolveServiceName()
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         process.arguments = [
             "find-generic-password",
-            "-s", "Claude Code-credentials",
+            "-s", serviceName,
             "-a", NSUserName(),
             "-w"  // Print password only
         ]
@@ -40,7 +113,7 @@ class ClaudeCodeSyncService {
         if exitCode == 0 {
             let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
             guard let value = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) else {
-                throw ClaudeCodeError.invalidJSON
+                return nil
             }
             return value
         } else if exitCode == 44 {
@@ -54,16 +127,115 @@ class ClaudeCodeSyncService {
         }
     }
 
+    /// Extracts accessToken from potentially truncated JSON using regex
+    private func extractAccessTokenViaRegex(from rawString: String) -> String? {
+        let pattern = "\"accessToken\"\\s*:\\s*\"([^\"]+)\""
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: rawString, range: NSRange(rawString.startIndex..., in: rawString)),
+              let tokenRange = Range(match.range(at: 1), in: rawString) else {
+            return nil
+        }
+        return String(rawString[tokenRange])
+    }
+
+    // MARK: - Keychain Service Name Discovery
+
+    private static let legacyServiceName = "Claude Code-credentials"
+
+    /// Resolves the correct keychain service name for Claude Code credentials.
+    /// Claude Code v2.1.52+ changed from "Claude Code-credentials" to "Claude Code-credentials-HASH".
+    /// Tries legacy name first, then falls back to prefix search.
+    private func resolveServiceName() -> String {
+        if let cached = resolvedServiceName {
+            return cached
+        }
+
+        // Try legacy name first (fast path)
+        if keychainItemExists(serviceName: Self.legacyServiceName) {
+            resolvedServiceName = Self.legacyServiceName
+            return Self.legacyServiceName
+        }
+
+        // Fall back to searching for "Claude Code-credentials-" prefix
+        if let hashedName = findHashedServiceName() {
+            resolvedServiceName = hashedName
+            LoggingService.shared.log("Resolved hashed keychain service name: \(hashedName)")
+            return hashedName
+        }
+
+        // Default to legacy name (will fail gracefully if not found)
+        resolvedServiceName = Self.legacyServiceName
+        return Self.legacyServiceName
+    }
+
+    /// Checks if a keychain item exists with the given service name
+    private func keychainItemExists(serviceName: String) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", serviceName, "-a", NSUserName()]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    /// Searches the keychain for a hashed service name matching "Claude Code-credentials-*"
+    private func findHashedServiceName() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["dump-keychain"]
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+
+        guard process.terminationStatus == 0 else { return nil }
+
+        let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let prefix = "Claude Code-credentials-"
+
+        // Parse service names from dump-keychain output (format: "svce"<blob>="ServiceName")
+        for line in output.components(separatedBy: "\n") {
+            guard line.contains("\"svce\""), line.contains(prefix) else { continue }
+            // Extract the value between quotes after the =
+            if let equalsRange = line.range(of: "=\""),
+               let endQuoteRange = line.range(of: "\"", range: equalsRange.upperBound..<line.endIndex) {
+                let name = String(line[equalsRange.upperBound..<endQuoteRange.lowerBound])
+                if name.hasPrefix(prefix) {
+                    return name
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Invalidates the cached service name, forcing re-discovery on next access
+    func invalidateServiceNameCache() {
+        resolvedServiceName = nil
+    }
+
     /// Writes Claude Code credentials to system Keychain using security command
     func writeSystemCredentials(_ jsonData: String) throws {
-        LoggingService.shared.log("Writing credentials to keychain using security command")
+        let serviceName = resolveServiceName()
+        LoggingService.shared.log("Writing credentials to keychain using security command (service: \(serviceName))")
 
         // First, delete existing item
         let deleteProcess = Process()
         deleteProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         deleteProcess.arguments = [
             "delete-generic-password",
-            "-s", "Claude Code-credentials",
+            "-s", serviceName,
             "-a", NSUserName()
         ]
 
@@ -82,7 +254,7 @@ class ClaudeCodeSyncService {
         addProcess.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         addProcess.arguments = [
             "add-generic-password",
-            "-s", "Claude Code-credentials",
+            "-s", serviceName,
             "-a", NSUserName(),
             "-w", jsonData,
             "-U"  // Update if exists
@@ -197,7 +369,10 @@ class ClaudeCodeSyncService {
               let expiresAt = oauth["expiresAt"] as? TimeInterval else {
             return nil
         }
-        return Date(timeIntervalSince1970: expiresAt)
+        // Claude Code CLI stores expiresAt in milliseconds since epoch
+        // Values > 1e12 are definitely milliseconds (year 2001+ in ms vs year 33658 in seconds)
+        let epochSeconds = expiresAt > 1e12 ? expiresAt / 1000.0 : expiresAt
+        return Date(timeIntervalSince1970: epochSeconds)
     }
 
     /// Checks if the OAuth token in the credentials JSON is expired
@@ -220,6 +395,13 @@ class ClaudeCodeSyncService {
         guard let freshJSON = try readSystemCredentials() else {
             // No credentials in system - user not logged into CLI anymore
             LoggingService.shared.log("No system credentials found - skipping re-sync")
+            return
+        }
+
+        // Validate JSON before saving (defense-in-depth against truncated data)
+        guard let data = freshJSON.data(using: .utf8),
+              let _ = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            LoggingService.shared.log("Re-synced credentials contain invalid JSON - skipping save")
             return
         }
 

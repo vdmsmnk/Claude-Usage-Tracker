@@ -14,6 +14,7 @@ struct AboutView: View {
     @State private var isLoadingContributors = false
     @State private var contributorsError: String?
     @State private var showResetConfirmation = false
+    @State private var showFeedbackForm = false
 
     private var appVersion: String {
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
@@ -114,6 +115,30 @@ struct AboutView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, DesignTokens.Spacing.medium)
                     }
+                } else if contributorsError != nil {
+                    VStack(alignment: .leading, spacing: DesignTokens.Spacing.medium) {
+                        Text("about.contributors".localized(with: 0))
+                            .font(DesignTokens.Typography.sectionTitle)
+
+                        HStack {
+                            Text("about.contributors_failed".localized)
+                                .font(DesignTokens.Typography.caption)
+                                .foregroundColor(.secondary)
+
+                            Spacer()
+
+                            Button(action: { fetchContributors() }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "arrow.clockwise")
+                                        .font(.system(size: 10))
+                                    Text("common.retry".localized)
+                                        .font(.system(size: 11))
+                                }
+                                .foregroundColor(.blue)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 // Links
@@ -134,10 +159,8 @@ struct AboutView: View {
                             }
                         }
 
-                        LinkButton(title: "about.send_feedback".localized, icon: "envelope") {
-                            if let url = URL(string: "mailto:hamedelfayome@gmail.com") {
-                                NSWorkspace.shared.open(url)
-                            }
+                        LinkButton(title: "about.send_feedback".localized, icon: "bubble.left.and.text.bubble.right") {
+                            showFeedbackForm = true
                         }
 
                         Divider()
@@ -167,7 +190,7 @@ struct AboutView: View {
                         .font(DesignTokens.Typography.caption)
                         .foregroundColor(.secondary)
 
-                    Text("about.copyright".localized)
+                    Text("© \(String(Calendar.current.component(.year, from: Date()))) Hamed Elfayome")
                         .font(DesignTokens.Typography.caption)
                         .foregroundColor(.secondary)
                 }
@@ -182,6 +205,23 @@ struct AboutView: View {
             if contributors.isEmpty && !isLoadingContributors {
                 fetchContributors()
             }
+        }
+        .sheet(isPresented: $showFeedbackForm) {
+            FeedbackPromptView(
+                onSubmit: { _, _, _, _ in
+                    SharedDataStore.shared.saveHasSubmittedFeedback(true)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        showFeedbackForm = false
+                    }
+                },
+                onRemindLater: {
+                    showFeedbackForm = false
+                },
+                onDontAskAgain: {
+                    SharedDataStore.shared.saveNeverShowFeedbackPrompt(true)
+                    showFeedbackForm = false
+                }
+            )
         }
     }
 

@@ -20,7 +20,8 @@ final class MenuBarIconRenderer {
         usage: ClaudeUsage,
         apiUsage: APIUsage?,
         isDarkMode: Bool,
-        monochromeMode: Bool,
+        colorMode: MenuBarColorMode,
+        singleColorHex: String,
         showIconName: Bool,
         showNextSessionTime: Bool
     ) -> NSImage {
@@ -30,15 +31,44 @@ final class MenuBarIconRenderer {
             config: config,
             usage: usage,
             apiUsage: apiUsage,
-            showRemaining: globalConfig.showRemainingPercentage
+            showRemaining: globalConfig.showRemainingPercentage,
+            usePaceColoring: globalConfig.usePaceColoring
         )
+
+        // Calculate time marker fraction for session/week metrics
+        let timeMarkerFraction: CGFloat? = globalConfig.showTimeMarker
+            ? calculateTimeMarkerFraction(
+                metricType: metricType,
+                usage: usage,
+                showRemaining: globalConfig.showRemainingPercentage
+            )
+            : nil
+
+        // Compute pace status from RAW values (not display-adjusted)
+        let paceStatus: PaceStatus? = {
+            guard globalConfig.showPaceMarker, metricType != .api else { return nil }
+            // Get raw elapsed fraction (always non-inverted)
+            guard let rawElapsed = calculateTimeMarkerFraction(
+                metricType: metricType, usage: usage, showRemaining: false
+            ) else { return nil }
+            // Get raw used percentage
+            let rawUsed: Double = metricType == .session
+                ? usage.sessionPercentage
+                : usage.weeklyPercentage
+            return PaceStatus.calculate(
+                usedPercentage: rawUsed,
+                elapsedFraction: Double(rawElapsed)
+            )
+        }()
+        let showPaceMarker = globalConfig.showPaceMarker
 
         // API is ALWAYS text-based (no icon styles)
         if metricType == .api {
             return createAPITextStyle(
                 metricData: metricData,
                 isDarkMode: isDarkMode,
-                monochromeMode: monochromeMode,
+                colorMode: colorMode,
+                singleColorHex: singleColorHex,
                 showIconName: showIconName
             )
         }
@@ -50,44 +80,62 @@ final class MenuBarIconRenderer {
                 metricType: metricType,
                 metricData: metricData,
                 isDarkMode: isDarkMode,
-                monochromeMode: monochromeMode,
+                colorMode: colorMode,
+                singleColorHex: singleColorHex,
                 showIconName: showIconName,
                 showNextSessionTime: showNextSessionTime,
-                usage: usage
+                usage: usage,
+                timeMarkerFraction: timeMarkerFraction,
+                paceStatus: paceStatus,
+                showPaceMarker: showPaceMarker
             )
         case .progressBar:
             return createProgressBarStyle(
                 metricType: metricType,
                 metricData: metricData,
                 isDarkMode: isDarkMode,
-                monochromeMode: monochromeMode,
+                colorMode: colorMode,
+                singleColorHex: singleColorHex,
                 showIconName: showIconName,
                 showNextSessionTime: showNextSessionTime,
-                usage: usage
+                usage: usage,
+                timeMarkerFraction: timeMarkerFraction,
+                paceStatus: paceStatus,
+                showPaceMarker: showPaceMarker
             )
         case .percentageOnly:
             return createPercentageOnlyStyle(
                 metricType: metricType,
                 metricData: metricData,
                 isDarkMode: isDarkMode,
-                monochromeMode: monochromeMode,
-                showIconName: showIconName
+                colorMode: colorMode,
+                singleColorHex: singleColorHex,
+                showIconName: showIconName,
+                paceStatus: paceStatus,
+                showPaceMarker: showPaceMarker
             )
         case .icon:
             return createIconWithBarStyle(
                 metricType: metricType,
                 metricData: metricData,
                 isDarkMode: isDarkMode,
-                monochromeMode: monochromeMode,
-                showIconName: showIconName
+                colorMode: colorMode,
+                singleColorHex: singleColorHex,
+                showIconName: showIconName,
+                timeMarkerFraction: timeMarkerFraction,
+                paceStatus: paceStatus,
+                showPaceMarker: showPaceMarker
             )
         case .compact:
             return createCompactStyle(
                 metricType: metricType,
                 metricData: metricData,
                 isDarkMode: isDarkMode,
-                monochromeMode: monochromeMode,
-                showIconName: showIconName
+                colorMode: colorMode,
+                singleColorHex: singleColorHex,
+                showIconName: showIconName,
+                paceStatus: paceStatus,
+                showPaceMarker: showPaceMarker
             )
         }
     }
@@ -106,18 +154,27 @@ final class MenuBarIconRenderer {
         config: MetricIconConfig,
         usage: ClaudeUsage,
         apiUsage: APIUsage?,
-        showRemaining: Bool
+        showRemaining: Bool,
+        usePaceColoring: Bool = true
     ) -> MetricData {
         switch metricType {
         case .session:
-            let usedPercentage = usage.sessionPercentage
+            let usedPercentage = usage.effectiveSessionPercentage
             let displayPercentage = UsageStatusCalculator.getDisplayPercentage(
                 usedPercentage: usedPercentage,
                 showRemaining: showRemaining
             )
+            let sessionElapsed: Double? = usePaceColoring
+                ? UsageStatusCalculator.elapsedFraction(
+                    resetTime: usage.sessionResetTime,
+                    duration: Constants.sessionWindow,
+                    showRemaining: false
+                )
+                : nil
             let statusLevel = UsageStatusCalculator.calculateStatus(
                 usedPercentage: usedPercentage,
-                showRemaining: showRemaining
+                showRemaining: showRemaining,
+                elapsedFraction: sessionElapsed
             )
 
             return MetricData(
@@ -133,9 +190,17 @@ final class MenuBarIconRenderer {
                 usedPercentage: usedPercentage,
                 showRemaining: showRemaining
             )
+            let weekElapsed: Double? = usePaceColoring
+                ? UsageStatusCalculator.elapsedFraction(
+                    resetTime: usage.weeklyResetTime,
+                    duration: Constants.weeklyWindow,
+                    showRemaining: false
+                )
+                : nil
             let statusLevel = UsageStatusCalculator.calculateStatus(
                 usedPercentage: usedPercentage,
-                showRemaining: showRemaining
+                showRemaining: showRemaining,
+                elapsedFraction: weekElapsed
             )
 
             let displayText: String
@@ -198,10 +263,14 @@ final class MenuBarIconRenderer {
         metricType: MenuBarMetricType,
         metricData: MetricData,
         isDarkMode: Bool,
-        monochromeMode: Bool,
+        colorMode: MenuBarColorMode,
+        singleColorHex: String,
         showIconName: Bool,
         showNextSessionTime: Bool,
-        usage: ClaudeUsage
+        usage: ClaudeUsage,
+        timeMarkerFraction: CGFloat? = nil,
+        paceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         let percentage = CGFloat(metricData.percentage) / 100.0
 
@@ -220,7 +289,7 @@ final class MenuBarIconRenderer {
         let foregroundColor = menuBarForegroundColor(isDarkMode: isDarkMode)
         let outlineColor: NSColor = foregroundColor
         let textColor: NSColor = foregroundColor
-        let fillColor: NSColor = monochromeMode ? foregroundColor : getColorForStatusLevel(metricData.statusLevel)
+        let fillColor: NSColor = getColorForMode(colorMode, statusLevel: metricData.statusLevel, singleColorHex: singleColorHex, isDarkMode: isDarkMode)
 
         let xOffset: CGFloat = 0
 
@@ -254,6 +323,15 @@ final class MenuBarIconRenderer {
             )
             fillColor.setFill()
             fillPath.fill()
+        }
+
+        // Time-elapsed tick mark on the battery bar
+        if let fraction = timeMarkerFraction {
+            let tickX = round(xOffset + 1 + padding + (barWidth - padding * 2) * fraction)
+            let tickPath = NSBezierPath()
+            tickPath.move(to: NSPoint(x: tickX, y: barY))
+            tickPath.line(to: NSPoint(x: tickX, y: barY + barHeight))
+            drawPaceMarkerTick(tickPath, paceStatus: paceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
         }
 
         // Label BELOW the battery (replaces percentage text)
@@ -292,10 +370,14 @@ final class MenuBarIconRenderer {
         metricType: MenuBarMetricType,
         metricData: MetricData,
         isDarkMode: Bool,
-        monochromeMode: Bool,
+        colorMode: MenuBarColorMode,
+        singleColorHex: String,
         showIconName: Bool,
         showNextSessionTime: Bool,
-        usage: ClaudeUsage
+        usage: ClaudeUsage,
+        timeMarkerFraction: CGFloat? = nil,
+        paceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         // For progress bar: show "S" or "W" before the bar (not full prefix)
         let labelWidth: CGFloat = showIconName ? 10 : 0
@@ -312,7 +394,7 @@ final class MenuBarIconRenderer {
         // Use isDarkMode to determine correct foreground color for menu bar
         let foregroundColor = menuBarForegroundColor(isDarkMode: isDarkMode)
         let textColor: NSColor = foregroundColor
-        let fillColor: NSColor = monochromeMode ? foregroundColor : getColorForStatusLevel(metricData.statusLevel)
+        let fillColor: NSColor = getColorForMode(colorMode, statusLevel: metricData.statusLevel, singleColorHex: singleColorHex, isDarkMode: isDarkMode)
         let backgroundColor: NSColor = foregroundColor.withAlphaComponent(0.2)
 
         var xOffset: CGFloat = 1
@@ -356,6 +438,15 @@ final class MenuBarIconRenderer {
             fillColor.setFill()
             fillPath.fill()
 
+            // Time-elapsed tick mark on the progress bar
+            if let fraction = timeMarkerFraction {
+                let tickX = round(xOffset + barWidth * fraction)
+                let tickPath = NSBezierPath()
+                tickPath.move(to: NSPoint(x: tickX, y: barY))
+                tickPath.line(to: NSPoint(x: tickX, y: barY + barHeight))
+                drawPaceMarkerTick(tickPath, paceStatus: paceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
+            }
+
             // Draw session reset time inside the fill area if enabled and this is a session metric
             if showNextSessionTime && metricType == .session, let resetTime = metricData.sessionResetTime {
                 let timeString = resetTime.timeRemainingHoursString() as NSString
@@ -383,14 +474,14 @@ final class MenuBarIconRenderer {
         metricType: MenuBarMetricType,
         metricData: MetricData,
         isDarkMode: Bool,
-        monochromeMode: Bool,
-        showIconName: Bool
+        colorMode: MenuBarColorMode,
+        singleColorHex: String,
+        showIconName: Bool,
+        paceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)  // Larger font
-
-        // Use isDarkMode to determine correct foreground color for menu bar
-        let foregroundColor = menuBarForegroundColor(isDarkMode: isDarkMode)
-        let fillColor: NSColor = monochromeMode ? foregroundColor : getColorForStatusLevel(metricData.statusLevel)
+        let fillColor: NSColor = getColorForMode(colorMode, statusLevel: metricData.statusLevel, singleColorHex: singleColorHex, isDarkMode: isDarkMode)
 
         var fullText = ""
 
@@ -406,13 +497,25 @@ final class MenuBarIconRenderer {
         ]
 
         let textSize = fullText.size(withAttributes: attributes)
-        let image = NSImage(size: NSSize(width: textSize.width + 2, height: 18))
+        let hasPaceDot = showPaceMarker && paceStatus != nil
+        let paceDotExtra: CGFloat = hasPaceDot ? 8 : 0  // dot(4) + gaps(2+2)
+        let image = NSImage(size: NSSize(width: textSize.width + 2 + paceDotExtra, height: 18))
 
         image.lockFocus()
         defer { image.unlockFocus() }
 
         let textY = (18 - textSize.height) / 2
         fullText.draw(at: NSPoint(x: 2, y: textY), withAttributes: attributes)
+
+        // Pace dot after text
+        if showPaceMarker, let pace = paceStatus {
+            let dotSize: CGFloat = 4.0
+            let dotX = 2 + textSize.width + 2
+            let dotY = (18 - dotSize) / 2
+            let dotPath = NSBezierPath(ovalIn: NSRect(x: dotX, y: dotY, width: dotSize, height: dotSize))
+            pace.color.setFill()
+            dotPath.fill()
+        }
 
         return image
     }
@@ -421,8 +524,12 @@ final class MenuBarIconRenderer {
         metricType: MenuBarMetricType,
         metricData: MetricData,
         isDarkMode: Bool,
-        monochromeMode: Bool,
-        showIconName: Bool
+        colorMode: MenuBarColorMode,
+        singleColorHex: String,
+        showIconName: Bool,
+        timeMarkerFraction: CGFloat? = nil,
+        paceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         // For circle: make it bigger to fit S/W in center
         let circleSize: CGFloat = showIconName ? 22 : 18  // Bigger when showing label
@@ -437,7 +544,7 @@ final class MenuBarIconRenderer {
         // Use isDarkMode to determine correct foreground color for menu bar
         let foregroundColor = menuBarForegroundColor(isDarkMode: isDarkMode)
         let textColor: NSColor = foregroundColor
-        let fillColor: NSColor = monochromeMode ? foregroundColor : getColorForStatusLevel(metricData.statusLevel)
+        let fillColor: NSColor = getColorForMode(colorMode, statusLevel: metricData.statusLevel, singleColorHex: singleColorHex, isDarkMode: isDarkMode)
 
         let xOffset: CGFloat = 1
 
@@ -447,7 +554,7 @@ final class MenuBarIconRenderer {
         let center = NSPoint(x: centerX, y: size / 2)
         let radius = (circleSize - 4.0) / 2
         let startAngle: CGFloat = 90
-        let endAngle = startAngle + (360 * CGFloat(percentage))
+        let endAngle = startAngle - (360 * CGFloat(percentage))
 
         // Background ring
         let bgArcPath = NSBezierPath()
@@ -463,7 +570,7 @@ final class MenuBarIconRenderer {
         bgArcPath.lineCapStyle = .round
         bgArcPath.stroke()
 
-        // Progress ring
+        // Progress ring (clockwise from 12 o'clock)
         if percentage > 0 {
             let arcPath = NSBezierPath()
             arcPath.appendArc(
@@ -471,12 +578,29 @@ final class MenuBarIconRenderer {
                 radius: radius,
                 startAngle: startAngle,
                 endAngle: endAngle,
-                clockwise: false
+                clockwise: true
             )
             fillColor.setStroke()
             arcPath.lineWidth = 3.0
             arcPath.lineCapStyle = .round
             arcPath.stroke()
+        }
+
+        // Time-elapsed tick mark on the ring (clockwise from 12 o'clock)
+        if let fraction = timeMarkerFraction {
+            let tickAngle = (90 - 360 * fraction) * .pi / 180
+            let innerR = radius - 2.0
+            let outerR = radius + 2.0
+            let tickPath = NSBezierPath()
+            tickPath.move(to: NSPoint(
+                x: center.x + innerR * cos(tickAngle),
+                y: center.y + innerR * sin(tickAngle)
+            ))
+            tickPath.line(to: NSPoint(
+                x: center.x + outerR * cos(tickAngle),
+                y: center.y + outerR * sin(tickAngle)
+            ))
+            drawPaceMarkerTick(tickPath, paceStatus: paceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
         }
 
         // Draw S/W in the CENTER of the circle
@@ -499,13 +623,18 @@ final class MenuBarIconRenderer {
         metricType: MenuBarMetricType,
         metricData: MetricData,
         isDarkMode: Bool,
-        monochromeMode: Bool,
-        showIconName: Bool
+        colorMode: MenuBarColorMode,
+        singleColorHex: String,
+        showIconName: Bool,
+        paceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         let prefixWidth: CGFloat = showIconName ? 16 : 0
         let dotSize: CGFloat = 8
         let spacing: CGFloat = showIconName ? 1 : 0
-        let totalWidth = prefixWidth + spacing + dotSize + 1
+        let hasPaceDot = showPaceMarker && paceStatus != nil
+        let paceDotExtra: CGFloat = hasPaceDot ? 6 : 0  // gap(2) + dot(4)
+        let totalWidth = prefixWidth + spacing + dotSize + paceDotExtra + 1
         let height: CGFloat = 18
 
         let image = NSImage(size: NSSize(width: totalWidth, height: height))
@@ -516,7 +645,7 @@ final class MenuBarIconRenderer {
         // Use isDarkMode to determine correct foreground color for menu bar
         let foregroundColor = menuBarForegroundColor(isDarkMode: isDarkMode)
         let textColor: NSColor = foregroundColor
-        let fillColor: NSColor = monochromeMode ? foregroundColor : getColorForStatusLevel(metricData.statusLevel)
+        let fillColor: NSColor = getColorForMode(colorMode, statusLevel: metricData.statusLevel, singleColorHex: singleColorHex, isDarkMode: isDarkMode)
 
         var xOffset: CGFloat = 1
 
@@ -542,6 +671,16 @@ final class MenuBarIconRenderer {
         fillColor.setFill()
         dotPath.fill()
 
+        // Pace dot next to main dot
+        if showPaceMarker, let pace = paceStatus {
+            let paceDotSize: CGFloat = 4.0
+            let paceDotX = xOffset + dotSize + 2
+            let paceDotY = (height - paceDotSize) / 2
+            let paceDotPath = NSBezierPath(ovalIn: NSRect(x: paceDotX, y: paceDotY, width: paceDotSize, height: paceDotSize))
+            pace.color.setFill()
+            paceDotPath.fill()
+        }
+
         return image
     }
 
@@ -550,7 +689,8 @@ final class MenuBarIconRenderer {
     private func createAPITextStyle(
         metricData: MetricData,
         isDarkMode: Bool,
-        monochromeMode: Bool,
+        colorMode: MenuBarColorMode,
+        singleColorHex: String,
         showIconName: Bool
     ) -> NSImage {
         let font = NSFont.systemFont(ofSize: 11, weight: .medium)
@@ -604,7 +744,12 @@ final class MenuBarIconRenderer {
         profileInitial: String,
         monochromeMode: Bool,
         isDarkMode: Bool,
-        useSystemColor: Bool = false
+        useSystemColor: Bool = false,
+        sessionTimeMarker: CGFloat? = nil,
+        weekTimeMarker: CGFloat? = nil,
+        sessionPaceStatus: PaceStatus? = nil,
+        weekPaceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         let size: CGFloat = 24
         let image = NSImage(size: NSSize(width: size, height: size))
@@ -638,21 +783,32 @@ final class MenuBarIconRenderer {
         outerBgPath.lineWidth = outerStrokeWidth
         outerBgPath.stroke()
 
-        // Session progress ring (outer - primary metric)
+        // Session progress ring (outer - primary metric, clockwise from 12 o'clock)
         if sessionPercentage > 0 {
-            let sessionEndAngle = 90 + (360 * CGFloat(sessionPercentage / 100.0))
+            let sessionEndAngle = 90 - (360 * CGFloat(sessionPercentage / 100.0))
             let outerProgressPath = NSBezierPath()
             outerProgressPath.appendArc(
                 withCenter: center,
                 radius: outerRadius,
                 startAngle: 90,
                 endAngle: sessionEndAngle,
-                clockwise: false
+                clockwise: true
             )
             sessionColor.setStroke()
             outerProgressPath.lineWidth = outerStrokeWidth
             outerProgressPath.lineCapStyle = .round
             outerProgressPath.stroke()
+        }
+
+        // Session time marker on outer ring
+        if let fraction = sessionTimeMarker {
+            let tickAngle = (90 - 360 * fraction) * .pi / 180
+            let innerR = outerRadius - 2.0
+            let outerR = outerRadius + 2.0
+            let tickPath = NSBezierPath()
+            tickPath.move(to: NSPoint(x: center.x + innerR * cos(tickAngle), y: center.y + innerR * sin(tickAngle)))
+            tickPath.line(to: NSPoint(x: center.x + outerR * cos(tickAngle), y: center.y + outerR * sin(tickAngle)))
+            drawPaceMarkerTick(tickPath, paceStatus: sessionPaceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
         }
 
         // Inner ring (Week) - smaller radius, thinner stroke - Week is secondary
@@ -672,21 +828,32 @@ final class MenuBarIconRenderer {
         innerBgPath.lineWidth = innerStrokeWidth
         innerBgPath.stroke()
 
-        // Week progress ring (inner - secondary metric)
+        // Week progress ring (inner - secondary metric, clockwise from 12 o'clock)
         if weekPercentage > 0 {
-            let weekEndAngle = 90 + (360 * CGFloat(weekPercentage / 100.0))
+            let weekEndAngle = 90 - (360 * CGFloat(weekPercentage / 100.0))
             let innerProgressPath = NSBezierPath()
             innerProgressPath.appendArc(
                 withCenter: center,
                 radius: innerRadius,
                 startAngle: 90,
                 endAngle: weekEndAngle,
-                clockwise: false
+                clockwise: true
             )
             weekColor.setStroke()
             innerProgressPath.lineWidth = innerStrokeWidth
             innerProgressPath.lineCapStyle = .round
             innerProgressPath.stroke()
+        }
+
+        // Week time marker on inner ring
+        if let fraction = weekTimeMarker {
+            let tickAngle = (90 - 360 * fraction) * .pi / 180
+            let innerR = innerRadius - 2.0
+            let outerR = innerRadius + 2.0
+            let tickPath = NSBezierPath()
+            tickPath.move(to: NSPoint(x: center.x + innerR * cos(tickAngle), y: center.y + innerR * sin(tickAngle)))
+            tickPath.line(to: NSPoint(x: center.x + outerR * cos(tickAngle), y: center.y + outerR * sin(tickAngle)))
+            drawPaceMarkerTick(tickPath, paceStatus: weekPaceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
         }
 
         // Profile initial in center
@@ -714,7 +881,12 @@ final class MenuBarIconRenderer {
         profileName: String,
         monochromeMode: Bool,
         isDarkMode: Bool,
-        useSystemColor: Bool = false
+        useSystemColor: Bool = false,
+        sessionTimeMarker: CGFloat? = nil,
+        weekTimeMarker: CGFloat? = nil,
+        sessionPaceStatus: PaceStatus? = nil,
+        weekPaceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         let circleSize: CGFloat = 20
         let labelHeight: CGFloat = 10
@@ -754,21 +926,32 @@ final class MenuBarIconRenderer {
         outerBgPath.lineWidth = outerStrokeWidth
         outerBgPath.stroke()
 
-        // Session progress ring (outer - primary metric)
+        // Session progress ring (outer - primary metric, clockwise from 12 o'clock)
         if sessionPercentage > 0 {
-            let sessionEndAngle = 90 + (360 * CGFloat(sessionPercentage / 100.0))
+            let sessionEndAngle = 90 - (360 * CGFloat(sessionPercentage / 100.0))
             let outerProgressPath = NSBezierPath()
             outerProgressPath.appendArc(
                 withCenter: circleCenter,
                 radius: outerRadius,
                 startAngle: 90,
                 endAngle: sessionEndAngle,
-                clockwise: false
+                clockwise: true
             )
             sessionColor.setStroke()
             outerProgressPath.lineWidth = outerStrokeWidth
             outerProgressPath.lineCapStyle = .round
             outerProgressPath.stroke()
+        }
+
+        // Session time marker on outer ring
+        if let fraction = sessionTimeMarker {
+            let tickAngle = (90 - 360 * fraction) * .pi / 180
+            let innerR = outerRadius - 2.0
+            let outerR = outerRadius + 2.0
+            let tickPath = NSBezierPath()
+            tickPath.move(to: NSPoint(x: circleCenter.x + innerR * cos(tickAngle), y: circleCenter.y + innerR * sin(tickAngle)))
+            tickPath.line(to: NSPoint(x: circleCenter.x + outerR * cos(tickAngle), y: circleCenter.y + outerR * sin(tickAngle)))
+            drawPaceMarkerTick(tickPath, paceStatus: sessionPaceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
         }
 
         // Inner ring (Week) - Week is secondary
@@ -788,21 +971,32 @@ final class MenuBarIconRenderer {
         innerBgPath.lineWidth = innerStrokeWidth
         innerBgPath.stroke()
 
-        // Week progress ring (inner - secondary metric)
+        // Week progress ring (inner - secondary metric, clockwise from 12 o'clock)
         if weekPercentage > 0 {
-            let weekEndAngle = 90 + (360 * CGFloat(weekPercentage / 100.0))
+            let weekEndAngle = 90 - (360 * CGFloat(weekPercentage / 100.0))
             let innerProgressPath = NSBezierPath()
             innerProgressPath.appendArc(
                 withCenter: circleCenter,
                 radius: innerRadius,
                 startAngle: 90,
                 endAngle: weekEndAngle,
-                clockwise: false
+                clockwise: true
             )
             weekColor.setStroke()
             innerProgressPath.lineWidth = innerStrokeWidth
             innerProgressPath.lineCapStyle = .round
             innerProgressPath.stroke()
+        }
+
+        // Week time marker on inner ring
+        if let fraction = weekTimeMarker {
+            let tickAngle = (90 - 360 * fraction) * .pi / 180
+            let innerR = innerRadius - 2.0
+            let outerR = innerRadius + 2.0
+            let tickPath = NSBezierPath()
+            tickPath.move(to: NSPoint(x: circleCenter.x + innerR * cos(tickAngle), y: circleCenter.y + innerR * sin(tickAngle)))
+            tickPath.line(to: NSPoint(x: circleCenter.x + outerR * cos(tickAngle), y: circleCenter.y + outerR * sin(tickAngle)))
+            drawPaceMarkerTick(tickPath, paceStatus: weekPaceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
         }
 
         // Profile label below the circle (first 3 characters)
@@ -831,7 +1025,12 @@ final class MenuBarIconRenderer {
         profileName: String?,
         monochromeMode: Bool,
         isDarkMode: Bool,
-        useSystemColor: Bool = false
+        useSystemColor: Bool = false,
+        sessionTimeMarker: CGFloat? = nil,
+        weekTimeMarker: CGFloat? = nil,
+        sessionPaceStatus: PaceStatus? = nil,
+        weekPaceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         let barWidth: CGFloat = 24
         let barHeight: CGFloat = 4
@@ -866,6 +1065,15 @@ final class MenuBarIconRenderer {
         sessionColor.setFill()
         NSBezierPath(roundedRect: sessionFillRect, xRadius: 2, yRadius: 2).fill()
 
+        // Session time marker tick
+        if let fraction = sessionTimeMarker {
+            let tickX = round(barWidth * fraction)
+            let tickPath = NSBezierPath()
+            tickPath.move(to: NSPoint(x: tickX, y: currentY))
+            tickPath.line(to: NSPoint(x: tickX, y: currentY + barHeight))
+            drawPaceMarkerTick(tickPath, paceStatus: sessionPaceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
+        }
+
         // Week bar (if shown)
         if let weekPct = weekPercentage {
             currentY -= (spacing + barHeight)
@@ -877,6 +1085,15 @@ final class MenuBarIconRenderer {
             let weekFillRect = NSRect(x: 0, y: currentY, width: weekFillWidth, height: barHeight)
             weekColor.setFill()
             NSBezierPath(roundedRect: weekFillRect, xRadius: 2, yRadius: 2).fill()
+
+            // Week time marker tick
+            if let fraction = weekTimeMarker {
+                let tickX = round(barWidth * fraction)
+                let tickPath = NSBezierPath()
+                tickPath.move(to: NSPoint(x: tickX, y: currentY))
+                tickPath.line(to: NSPoint(x: tickX, y: currentY + barHeight))
+                drawPaceMarkerTick(tickPath, paceStatus: weekPaceStatus, showPaceMarker: showPaceMarker, isDarkMode: isDarkMode)
+            }
         }
 
         // Profile label (if shown)
@@ -904,14 +1121,18 @@ final class MenuBarIconRenderer {
         profileInitial: String?,
         monochromeMode: Bool,
         isDarkMode: Bool,
-        useSystemColor: Bool = false
+        useSystemColor: Bool = false,
+        paceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
     ) -> NSImage {
         let dotSize: CGFloat = 10
         let labelHeight: CGFloat = profileInitial != nil ? 10 : 0
         let spacing: CGFloat = profileInitial != nil ? 1 : 0
+        let hasPaceDot = showPaceMarker && paceStatus != nil
+        let paceDotExtra: CGFloat = hasPaceDot ? 6 : 0  // gap(2) + dot(4)
 
         let totalHeight = dotSize + spacing + labelHeight
-        let totalWidth = max(dotSize, 16)
+        let totalWidth = max(dotSize + paceDotExtra, 16)
 
         let image = NSImage(size: NSSize(width: totalWidth, height: totalHeight))
 
@@ -922,15 +1143,26 @@ final class MenuBarIconRenderer {
         let foregroundColor = menuBarForegroundColor(isDarkMode: isDarkMode)
         let dotColor: NSColor = getColor(for: status, monochromeMode: monochromeMode, useSystemColor: useSystemColor, isDarkMode: isDarkMode)
 
-        // Draw dot
+        // Draw main status dot
+        let mainDotX = (totalWidth - dotSize - paceDotExtra) / 2
         let dotRect = NSRect(
-            x: (totalWidth - dotSize) / 2,
+            x: mainDotX,
             y: totalHeight - dotSize,
             width: dotSize,
             height: dotSize
         )
         dotColor.setFill()
         NSBezierPath(ovalIn: dotRect).fill()
+
+        // Pace dot next to main dot
+        if showPaceMarker, let pace = paceStatus {
+            let paceDotSize: CGFloat = 4.0
+            let paceDotX = mainDotX + dotSize + 2
+            let paceDotY = totalHeight - dotSize + (dotSize - paceDotSize) / 2
+            let paceDotPath = NSBezierPath(ovalIn: NSRect(x: paceDotX, y: paceDotY, width: paceDotSize, height: paceDotSize))
+            pace.color.setFill()
+            paceDotPath.fill()
+        }
 
         // Profile initial (if shown)
         if let initial = profileInitial {
@@ -991,6 +1223,97 @@ final class MenuBarIconRenderer {
         return image
     }
 
+    // MARK: - Multi-Profile Percentage Style
+
+    /// Creates a percentage text icon for multi-profile mode
+    /// Format: "30 · 4" (session · week) with status colors, optional profile label below
+    func createMultiProfilePercentage(
+        sessionPercentage: Double,
+        weekPercentage: Double?,
+        sessionStatus: UsageStatusLevel,
+        weekStatus: UsageStatusLevel,
+        profileName: String?,
+        monochromeMode: Bool,
+        isDarkMode: Bool,
+        useSystemColor: Bool = false,
+        sessionPaceStatus: PaceStatus? = nil,
+        weekPaceStatus: PaceStatus? = nil,
+        showPaceMarker: Bool = false
+    ) -> NSImage {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+        let foregroundColor = menuBarForegroundColor(isDarkMode: isDarkMode)
+        let separatorColor = foregroundColor.withAlphaComponent(0.4)
+
+        let sessionColor: NSColor = getColor(for: sessionStatus, monochromeMode: monochromeMode, useSystemColor: useSystemColor, isDarkMode: isDarkMode)
+        let weekColor: NSColor = getColor(for: weekStatus, monochromeMode: monochromeMode, useSystemColor: useSystemColor, isDarkMode: isDarkMode)
+
+        // Build the attributed string
+        let attributed = NSMutableAttributedString()
+
+        // Session number
+        let sessionText = "\(Int(sessionPercentage))"
+        attributed.append(NSAttributedString(string: sessionText, attributes: [
+            .font: font,
+            .foregroundColor: sessionColor
+        ]))
+
+        // Separator and week number (if shown)
+        if let weekPct = weekPercentage {
+            attributed.append(NSAttributedString(string: " · ", attributes: [
+                .font: font,
+                .foregroundColor: separatorColor
+            ]))
+            let weekText = "\(Int(weekPct))"
+            attributed.append(NSAttributedString(string: weekText, attributes: [
+                .font: font,
+                .foregroundColor: weekColor
+            ]))
+        }
+
+        let textSize = attributed.size()
+        let hasPaceDot = showPaceMarker && sessionPaceStatus != nil
+        let paceDotExtra: CGFloat = hasPaceDot ? 6 : 0  // gap(2) + dot(4)
+        let labelHeight: CGFloat = profileName != nil ? 10 : 0
+        let labelSpacing: CGFloat = profileName != nil ? 1 : 0
+        let totalWidth = max(textSize.width + 2 + paceDotExtra, profileName != nil ? CGFloat(String(profileName!.prefix(3)).count) * 6 + 4 : 0)
+        let totalHeight = textSize.height + labelSpacing + labelHeight
+
+        let image = NSImage(size: NSSize(width: totalWidth, height: totalHeight))
+
+        image.lockFocus()
+        defer { image.unlockFocus() }
+
+        // Draw percentage text at top, centered (shift left slightly if pace dot present)
+        let textX = (totalWidth - textSize.width - paceDotExtra) / 2
+        let textY = totalHeight - textSize.height
+        attributed.draw(at: NSPoint(x: textX, y: textY))
+
+        // Pace dot after the percentage text
+        if showPaceMarker, let pace = sessionPaceStatus {
+            let dotSize: CGFloat = 4.0
+            let dotX = textX + textSize.width + 2
+            let dotY = textY + (textSize.height - dotSize) / 2
+            let dotPath = NSBezierPath(ovalIn: NSRect(x: dotX, y: dotY, width: dotSize, height: dotSize))
+            pace.color.setFill()
+            dotPath.fill()
+        }
+
+        // Profile label below (if shown)
+        if let name = profileName {
+            let label = String(name.prefix(3))
+            let labelAttributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 8, weight: .medium),
+                .foregroundColor: foregroundColor.withAlphaComponent(0.85)
+            ]
+            let labelString = label as NSString
+            let labelSize = labelString.size(withAttributes: labelAttributes)
+            let labelX = (totalWidth - labelSize.width) / 2
+            labelString.draw(at: NSPoint(x: labelX, y: 0), withAttributes: labelAttributes)
+        }
+
+        return image
+    }
+
     // MARK: - Helper Methods
 
     /// Returns the appropriate foreground color for menu bar icons based on appearance
@@ -1010,6 +1333,24 @@ final class MenuBarIconRenderer {
         }
     }
 
+    /// Returns the appropriate color based on the color mode setting
+    /// - Parameters:
+    ///   - colorMode: The color mode to use
+    ///   - statusLevel: The usage status level (for multi-color mode)
+    ///   - singleColorHex: The custom hex color (for single color mode)
+    ///   - isDarkMode: Whether the menu bar is in dark mode
+    /// - Returns: The color to use for rendering
+    private func getColorForMode(_ colorMode: MenuBarColorMode, statusLevel: UsageStatusLevel, singleColorHex: String, isDarkMode: Bool) -> NSColor {
+        switch colorMode {
+        case .multiColor:
+            return getColorForStatusLevel(statusLevel)
+        case .monochrome:
+            return menuBarForegroundColor(isDarkMode: isDarkMode)
+        case .singleColor:
+            return NSColor(hex: singleColorHex) ?? NSColor.systemBlue
+        }
+    }
+
     /// Returns the appropriate color based on mode settings
     /// - Parameters:
     ///   - status: The usage status level
@@ -1023,6 +1364,55 @@ final class MenuBarIconRenderer {
         } else {
             return getColorForStatusLevel(status)
         }
+    }
+
+    /// Draws a pace-colored tick mark. When showPaceMarker is on and pace data is available,
+    /// the tick color reflects the 6-tier pace urgency (green→purple) regardless of color mode.
+    /// Otherwise falls back to the menu bar foreground color (current upstream behavior).
+    private func drawPaceMarkerTick(
+        _ path: NSBezierPath,
+        paceStatus: PaceStatus?,
+        showPaceMarker: Bool,
+        isDarkMode: Bool
+    ) {
+        let color: NSColor
+        if showPaceMarker, let pace = paceStatus {
+            color = pace.color
+        } else {
+            color = menuBarForegroundColor(isDarkMode: isDarkMode)
+        }
+        color.setStroke()
+        path.lineWidth = 2.0
+        path.lineCapStyle = .round
+        path.stroke()
+    }
+
+    /// Calculates the time marker fraction for a given metric type
+    private func calculateTimeMarkerFraction(
+        metricType: MenuBarMetricType,
+        usage: ClaudeUsage,
+        showRemaining: Bool
+    ) -> CGFloat? {
+        let resetTime: Date?
+        let duration: TimeInterval
+
+        switch metricType {
+        case .session:
+            resetTime = usage.sessionResetTime
+            duration = Constants.sessionWindow
+        case .week:
+            resetTime = usage.weeklyResetTime
+            duration = Constants.weeklyWindow
+        case .api:
+            return nil
+        }
+
+        guard let f = UsageStatusCalculator.elapsedFraction(
+            resetTime: resetTime,
+            duration: duration,
+            showRemaining: showRemaining
+        ) else { return nil }
+        return CGFloat(f)
     }
 
     /// Formats token count intelligently (e.g., 1M instead of 1000K)

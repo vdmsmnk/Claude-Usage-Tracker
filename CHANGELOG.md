@@ -5,6 +5,213 @@ All notable changes to Claude Usage Tracker will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.3] - 2026-03-10
+
+### 6-Tier Pace System
+
+- **Pace Status Engine**: New `PaceStatus` enum with 6 urgency tiers — Comfortable, On Track, Warming, Pressing, Critical, Runaway — projecting end-of-period usage from current consumption rate
+- **Pace Marker on Menu Bar**: Bold `┃` marker drawn at elapsed-time position on progress bars, colored by 6-tier pace (green → teal → yellow → orange → red → purple)
+- **Pace Marker on Statusline**: ANSI-colored `┃` inserted into the ASCII progress bar at the correct elapsed position in the terminal
+- **Pace Marker on Popover**: Time marker upgraded from 1.5px line to 2.5px rounded rectangle, colored by pace status
+- **Independent Toggles**: "Show Pace Marker" and "Pace tier colors" are independently controllable in both menu bar and statusline settings
+
+### 3 Color Modes (Menu Bar + Statusline)
+
+- **Multi-Color**: Threshold-based colors for usage indicators (default behavior)
+- **Greyscale**: No colors — adapts to menu bar appearance / terminal theme
+- **Single Color**: User picks a custom hex color applied to all elements
+- **Color Mode UI**: New "Statusline Colors" settings card with 3 selectable mode buttons and ColorPicker for Single Color
+- **Backwards Compatible**: Old `monochromeMode: true/false` automatically migrated to new `colorMode` system
+
+### Label & Formatting Toggles
+
+- **Show/Hide "Ctx:" Label**: Toggle the `Ctx:` prefix on context display
+- **Show/Hide "Usage:" Label**: Toggle the `Usage:` prefix on usage display
+- **Show/Hide "Reset:" Label**: Toggle the `Reset:` prefix on reset time
+- **24-Hour Time Format**: Override system time format for reset time display (both statusline and preview)
+
+### Terminal-Matching Preview
+
+- **ANSI Color Preview**: ClaudeCodeView preview now renders with ANSI-equivalent terminal colors — blue for directory, green for branch, yellow for model, magenta for profile, cyan for context, 10-level gradient for usage
+- **Live Pace Colors**: Pace marker in preview colored by real pace tier when step colors are enabled
+- **Real Data**: Preview uses actual usage data when available instead of static demo values
+
+### New Utilities
+
+- **Color+Extensions.swift**: `Color(hex:)` init, `toHex()` method, `hexString` property, and `NSColor(hex:)` for hex color conversion
+- **Date.roundedToNearestMinute()**: Strips seconds from reset time to prevent display flickering
+
+### Bug Fixes
+
+- **CPU Spin-Loop Fix**: Fixed 104% CPU caused by per-button `effectiveAppearance` KVO creating infinite redraw loops — replaced with single `NSApp` observer + image data cache deduplication
+- **Reset Time Rounding**: Reset time now rounds to nearest minute to prevent "pinballing" between e.g. 6:59 and 7:00
+- **Pace Marker Restoration**: Pace marker preserved correctly after session resets
+
+### Refactoring
+
+- **MenuBarManager**: Removed empty `observeAppearanceChanges()` no-op and unused `appearanceObserver`; simplified `statusBarAppearanceDidChange()` by removing debounce timer (safe due to image cache)
+- **StatusBarUIManager**: `image.isTemplate` set before assigning to `button.image` to avoid extra KVO; template mode disabled when pace marker is active
+- **WindowCoordinator**: Removed `sizingOptions` workaround; uses `Constants.WindowSizes.popoverSize`
+- **PopoverContentView**: Removed `.fixedSize(horizontal: false, vertical: true)` that caused layout issues
+- **MenuBarIconConfiguration**: Replaced `monochromeMode: Bool` with `colorMode: MenuBarColorMode` + `singleColorHex`; custom `encode(to:)` no longer writes legacy key
+
+### Localization
+
+- Updated all 9 localization files with new keys for pace marker, color mode, and label toggles
+- New keys: `claudecode.component_pace_marker`, `claudecode.pace_marker_info`, `appearance.show_pace_marker_title`, `appearance.show_pace_marker_description`, `appearance.pace_marker_section_title`
+
+### Contributors
+
+- **reowens** (Robert Owens) — 6-tier pace system, color mode system (Multi-Color/Greyscale/Single Color), pace markers for menu bar and statusline, terminal-matching preview with ANSI colors, label toggles, 24-hour time format, CPU spin-loop fix in menu bar rendering, pace marker restoration after session reset
+
+---
+
+## [3.0.2] - 2026-03-10
+
+### API Cost Tracking & Usage Monitoring
+
+- **API Cost Dashboard**: Monthly API cost tracking with daily bar chart, per-API-key breakdown, and per-model cost details — fetched from Console `/usage_cost` endpoint
+- **Rate Limit Header Usage**: CLI OAuth usage now fetched via Messages API rate limit headers (`anthropic-ratelimit-unified-*`) instead of the disabled `/api/oauth/usage` endpoint — uses a minimal Haiku request for near-zero cost
+- **Expired Session Window Handling**: New `effectiveSessionPercentage` returns 0% when the 5-hour session window has expired, preventing stale high percentages from persisting in the UI, menu bar icon, notifications, and auto-switch logic
+
+### Browser-Based Authentication
+
+- **WKWebView Sign-In**: Embedded browser authentication for both Claude.ai and Anthropic Console — auto-extracts `sessionKey` cookie after login, including Google SSO support
+- **Session Key Expiry Tracking**: Cookie expiry date stored per profile with visual status indicators (expired/expiring soon/time remaining) in API Console settings
+- **Manual Key Fallback**: Manual session key entry preserved under an "Advanced: Manual Session Key" disclosure group in all credential views and the setup wizard
+
+### Popover UI Overhaul
+
+- **Auto-Sizing Popover**: Popover height now dynamically matches content via `intrinsicContentSize` instead of a fixed 600px frame — grows/shrinks based on available data
+- **Header Redesign**: Removed logo image; added settings gear icon button alongside refresh in the header with hover animations
+- **Footer Removed**: Quit button removed from popover footer — quit is now in the settings bottom bar
+- **API Cost Card**: New expandable card showing total monthly cost, daily cost bar chart, and per-key model breakdown with tap-to-expand source rows
+
+### Time Display & Formatting
+
+- **3-Way Time Display**: Replaced binary "show remaining time" toggle with a segmented picker — choose Reset Time, Remaining Time, or Both (e.g., "Resets in 3h 45m (Today 3:59pm)")
+- **Time Format Preference**: New setting for 12-hour, 24-hour, or system-default time format — applied across all popover reset times, chart labels, and usage history timestamps
+- **Improved Duration Strings**: Multi-day durations now show "Xd Yh" format instead of just "X days"
+
+### Settings & Navigation
+
+- **App Settings Section**: New settings page for app-wide preferences (launch at login) with `gearshape.2.fill` icon
+- **Bottom Bar Labels**: Settings bottom bar items now show both icon and text label; added Quit button with red hover
+- **Updates Removed from Bottom Bar**: Updates section moved out of the bottom bar for cleaner layout
+
+### Visual & Color Improvements
+
+- **Adaptive Green**: All hardcoded `Color.green` replaced with `Color.adaptiveGreen` — dark forest green in light mode, bright green in dark mode for better contrast on translucent surfaces
+- **Chart Axis Fix**: Billing cycle chart x-axis now uses proper `Date` values instead of string labels, fixing irregular spacing
+
+### Notifications
+
+- **Session Key Expiry Alert**: Scheduled notification 24 hours before API session key expires with automatic immediate send if already within the window
+- **Notification Dedup Fix**: Threshold-based notification identifiers now use the configured threshold level (not current percentage) to prevent duplicate alerts when usage fluctuates
+
+### Localization
+
+- **9 Languages Updated**: All localization files updated with ~17 new keys per language for time display settings, browser authentication, app settings section, and combined reset time format
+- **New Keys**: `menubar.resets_both`, `popover.time_display*`, `popover.time_format*`, `personal.signin_*`, `section.app_settings_*`
+
+### Technical
+
+- **Console API Deduplication**: All Console GET requests now go through a shared `consoleRequest()` helper with automatic network logging
+- **API Usage Always Fetched**: Removed `loadAPITrackingEnabled()` gate — API usage is fetched whenever credentials are available
+- **Profile Data Isolation**: Non-active profile popover no longer leaks the active profile's API console data
+
+---
+
+## [3.0.1] - 2026-03-08
+
+### Added
+
+- **Popover Settings Tab**: New app-wide settings tab under "Popover" to customize popover display
+- **Show Remaining Time**: Option to display countdown to reset (e.g., "Resets in 3h 45m") instead of absolute reset time (e.g., "Resets Today 3:59am") — applies to both single and multi-profile popovers
+
+### Fixed
+
+- **Multi-Display CPU Usage**: Fixed high CPU usage when connected to multiple displays — appearance change observers now debounced to prevent redundant redraws
+
+---
+
+## [3.0.0] - 2026-03-08
+
+### Major Release — Headless Mode, Usage History, Global Shortcuts & UI Overhaul
+
+A massive update with 14+ new features, 7+ bug fixes, and 12 ported improvements from the novastate fork. This release introduces headless Mac support, interactive usage history charts, global keyboard shortcuts, auto-switch profiles, a borderless vibrancy settings window, and much more.
+
+### Added
+
+- **Headless Mode**: Remote Desktop support for headless Mac environments (Mac mini/Mac Studio with no monitor at boot)
+- **Usage History Tracking**: Interactive timeline charts (session, weekly, billing) with 5h/24h/7d/30d scales, export to JSON/CSV
+- **Global Keyboard Shortcuts**: Configurable hotkeys (Toggle Popover, Refresh, Open Settings, Next Profile) via Carbon API — no Accessibility permission required
+- **Auto-Switch Profiles**: Automatically switch to next available profile when session limit reached
+- **In-App Feedback Prompt**: Feedback form shown after 7 days, anonymous analytics-only
+- **Mobile App "Coming Soon"**: Interest-collection painted door for future mobile companion
+- **Support Page**: Buy Me a Coffee integration with GitHub Sponsors
+- **Network Logging & Debug View**: Timed network capture sessions with request/response detail viewer
+- **Claude Code Statusline — Model Name**: Display current model (Opus, Sonnet) in CLI statusline
+- **Claude Code Statusline — Context Window**: Show context usage as percentage or token count
+- **Claude Code Statusline — Profile Name**: Show active profile name in CLI statusline
+- **Time-Elapsed Marker**: Visual tick marks on progress indicators showing time elapsed in period
+- **Pace-Aware Coloring**: Color indicators based on projected end-of-period usage
+- **Multi-Profile Percentage Style**: New "30 · 4" percentage text icon style for multi-profile mode
+- **Simplified Chinese (zh-cn)**: Full localization (9th language) — contributed by qianmoQ
+- **Simplified Setup Wizard**: CLI auto-detection on first launch (ported from novastate fork)
+- **Keychain Service Name Discovery**: Compatibility with Claude Code v2.1.52+ hashed keychain names (ported)
+- **Wake-from-Sleep Refresh**: Auto-refresh with 10s debounce after waking from sleep (ported)
+- **Stale Data & Error Banners**: Credential expired, refresh failed, and staleness warnings in popover (ported)
+- **Overage Credit Grant Balance**: Display overage balance in popover (ported)
+- **Custom Notification Thresholds**: User-defined percentage thresholds with sound picker (ported)
+- **CLAUDE_CONFIG_DIR Support**: Respect custom Claude config directory environment variable (ported)
+- **Statusline Usage Cache**: Instant CLI rendering via usage cache file (ported)
+- **200+ new localization strings** across all 9 languages
+
+### Changed
+
+- **Borderless Settings Window**: Full vibrancy design with custom traffic lights, HUD material, rounded corners
+- **Settings Sidebar Redesign**: Bottom bar with About/Debug/Support/Updates, fixed 190pt width
+- **Popover Vibrancy Background**: Always-active NSVisualEffectView with tint overlay
+- **Standardized Design Tokens**: Translucent card/input/border colors for vibrancy compatibility
+- **ClaudeCodeView Redesigned**: Single settings card with hierarchical sub-options
+- **Credential Fallback Chain**: 3-tier priority (Claude.ai → CLI OAuth → Keychain)
+- **Credential File Fallback**: Read from .credentials.json → Keychain → regex extraction
+- **Multi-Profile API Fetching**: Each profile's API console usage now fetched independently
+- **Appearance Observation**: Per-button effectiveAppearance observation for wallpaper changes
+- **Circle/Ring Direction**: Progress rings now draw clockwise from 12 o'clock
+- **Detached Popover**: Uses NSPanel with HUD style instead of NSWindow
+- **Header Logo**: Template rendering for automatic light/dark adaptation
+- **Settings Window Size**: Increased to 720×750
+- **Profile Deletion**: Cleans up usage history and tracking data
+- **Per-Profile Notification Tracking**: Independent threshold state per profile (ported)
+
+### Fixed
+
+- **Notification Persistence**: Sent notifications now persist across app restarts via UserDefaults
+- **Notification Deduplication**: Threshold-level identifiers prevent duplicate alerts at each percentage
+- **Overage Limit Fetching**: Now fetched in parallel with usage data when enabled
+- **RTL Shortcuts Icon**: Corrected icon for right-to-left locale accounts
+- **Dark Mode Detection**: Uses bestMatch for reliable appearance detection + cache invalidation
+- **CLI Context Window**: Accurate context display in statusline bash script
+- **Titlebar Separator**: Hidden via view hierarchy traversal for clean borderless look
+- **Token Expiry**: Milliseconds vs seconds fix for CLI OAuth tokens (ported)
+- **SIGSEGV Crash**: Removed synchronous Process spawn from SwiftUI body evaluation (ported)
+- **Menu Bar Re-Enable**: Deferred icon update to next run loop after re-enabling (ported)
+
+### Contributors
+
+- **SteveBlackUK** — Model name display option for statusline
+- **eliasyin** — Usage history tracking with interactive timeline charts
+- **qianmoQ** — Simplified Chinese (zh-cn) localization
+- **novastate** — Fork contributions: simplified CLI onboarding, keychain discovery, credential security, resilience features
+- **heathdutton** — Auto-rotate profiles on session limit, CLI OAuth multi-profile fix, profile name in statusline, menu bar re-enable fix
+- **tsvikas** — Time-elapsed marker on progress bars
+- **kynoptic** — Clockwise progress arc fix
+- **khromov** — Extra usage balance
+
+---
+
 ## [2.3.0] - 2026-01-23
 
 ### Major Release - Multi-Profile Menu Bar Display & Enhanced UI
@@ -1459,6 +1666,10 @@ This major release represents a significant milestone for Claude Usage Tracker, 
 - Detailed usage dashboard with countdown timers
 - Support for macOS 14.0+ (Sonoma and later)
 
+[3.0.3]: https://github.com/hamed-elfayome/Claude-Usage-Tracker/compare/v3.0.2...v3.0.3
+[3.0.2]: https://github.com/hamed-elfayome/Claude-Usage-Tracker/compare/v3.0.1...v3.0.2
+[3.0.1]: https://github.com/hamed-elfayome/Claude-Usage-Tracker/compare/v3.0.0...v3.0.1
+[3.0.0]: https://github.com/hamed-elfayome/Claude-Usage-Tracker/compare/v2.3.0...v3.0.0
 [2.3.0]: https://github.com/hamed-elfayome/Claude-Usage-Tracker/compare/v2.2.3...v2.3.0
 [2.2.3]: https://github.com/hamed-elfayome/Claude-Usage-Tracker/compare/v2.2.2...v2.2.3
 [2.2.2]: https://github.com/hamed-elfayome/Claude-Usage-Tracker/compare/v2.2.1...v2.2.2

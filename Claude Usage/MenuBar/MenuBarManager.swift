@@ -11,6 +11,12 @@ class MenuBarManager: NSObject, ObservableObject {
     @Published private(set) var apiUsage: APIUsage?
     @Published private(set) var isRefreshing: Bool = false
 
+    // Error tracking for stale data / credential banners
+    @Published private(set) var hasCredentialError: Bool = false
+    @Published private(set) var consecutiveRefreshFailures: Int = 0
+    @Published private(set) var lastRefreshError: String? = nil
+    @Published private(set) var lastSuccessfulRefreshTime: Date? = nil
+
     // Multi-profile mode: track which profile's icon was clicked
     @Published private(set) var clickedProfileId: UUID?
     @Published private(set) var clickedProfileUsage: ClaudeUsage?
@@ -24,6 +30,14 @@ class MenuBarManager: NSObject, ObservableObject {
 
     // Track when refresh was last triggered (for distinguishing user vs auto refresh)
     private var lastRefreshTriggerTime: Date = .distantPast
+
+    // Track last known reset times for history recording
+    private var lastKnownSessionResetTime: [UUID: Date] = [:]
+    private var lastKnownWeeklyResetTime: [UUID: Date] = [:]
+    private var lastKnownAPIResetTime: [UUID: Date] = [:]
+
+    // Track if a reset was just recorded to prevent duplicate periodic snapshots
+    private var resetJustRecorded: [UUID: (session: Bool, weekly: Bool)] = [:]
 
     // Popover for beautiful SwiftUI interface
     private var popover: NSPopover?
@@ -42,6 +56,9 @@ class MenuBarManager: NSObject, ObservableObject {
 
     // Session dashboard window reference
     private var dashboardWindow: NSWindow?
+
+    // Feedback prompt window reference
+    private var feedbackWindow: NSWindow?
 
     // Track which button is currently showing the popover
     private weak var currentPopoverButton: NSStatusBarButton?
@@ -62,6 +79,15 @@ class MenuBarManager: NSObject, ObservableObject {
     // Observer for appearance changes
     private var appearanceObserver: NSKeyValueObservation?
 
+    // Track which profiles have already triggered auto-switch (prevents repeated firing)
+    private var autoSwitchedProfileIds: Set<UUID> = []
+
+    // Observer for refresh interval changes
+    private var refreshIntervalObserver: NSKeyValueObservation?
+
+    // Observer for icon style changes
+    private var iconStyleObserver: NSObjectProtocol?
+
     // Observer for icon configuration changes
     private var iconConfigObserver: NSObjectProtocol?
 
@@ -71,6 +97,13 @@ class MenuBarManager: NSObject, ObservableObject {
     // Observer for display mode changes (single/multi profile)
     private var displayModeObserver: NSObjectProtocol?
     private var openSettingsObserver: NSObjectProtocol?
+
+    // Observer for screen/display changes (headless mode support)
+    private var screenObserver: NSObjectProtocol?
+
+    // Observer for wake-from-sleep
+    private var wakeObserver: NSObjectProtocol?
+    private var lastAutoRefreshTime: Date = .distantPast
 
     // MARK: - Image Caching (CPU Optimization)
     private var cachedImage: NSImage?
@@ -102,7 +135,8 @@ class MenuBarManager: NSObject, ObservableObject {
             let displayConfig: MenuBarIconConfiguration
             if !hasUsageCredentials {
                 displayConfig = MenuBarIconConfiguration(
-                    monochromeMode: config.monochromeMode,
+                    colorMode: config.colorMode,
+                    singleColorHex: config.singleColorHex,
                     showIconNames: config.showIconNames,
                     metrics: config.metrics.map { metric in
                         var updatedMetric = metric
@@ -196,9 +230,36 @@ class MenuBarManager: NSObject, ObservableObject {
 
         // Observe open settings request (e.g., from session dashboard)
         observeOpenSettings()
+
+        // Setup headless mode observer if enabled (for Remote Desktop support)
+        setupHeadlessModeObserver()
+
+        // Setup wake-from-sleep observer for auto-refresh
+        setupWakeObserver()
+
+        // Setup global keyboard shortcuts
+        setupShortcuts()
+    }
+
+    private func setupShortcuts() {
+        let shortcutManager = ShortcutManager.shared
+        shortcutManager.onTogglePopover = { [weak self] in
+            self?.togglePopover(nil)
+        }
+        shortcutManager.onRefresh = { [weak self] in
+            self?.refreshUsage()
+        }
+        shortcutManager.onOpenSettings = { [weak self] in
+            self?.preferencesClicked()
+        }
+        shortcutManager.onNextProfile = { [weak self] in
+            self?.switchToNextProfile()
+        }
+        shortcutManager.startListening()
     }
 
     func cleanup() {
+        ShortcutManager.shared.stopListening()
         refreshTimer?.invalidate()
         refreshTimer = nil
         networkMonitor.stopMonitoring()
@@ -208,6 +269,12 @@ class MenuBarManager: NSObject, ObservableObject {
         cancellables.removeAll()  // Clean up Combine subscriptions
         appearanceObserver?.invalidate()
         appearanceObserver = nil
+        refreshIntervalObserver?.invalidate()
+        refreshIntervalObserver = nil
+        if let iconStyleObserver = iconStyleObserver {
+            NotificationCenter.default.removeObserver(iconStyleObserver)
+            self.iconStyleObserver = nil
+        }
         if let iconConfigObserver = iconConfigObserver {
             NotificationCenter.default.removeObserver(iconConfigObserver)
             self.iconConfigObserver = nil
@@ -224,6 +291,14 @@ class MenuBarManager: NSObject, ObservableObject {
             NotificationCenter.default.removeObserver(openSettingsObserver)
             self.openSettingsObserver = nil
         }
+        if let screenObserver = screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+            self.screenObserver = nil
+        }
+        if let wakeObserver = wakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
+            self.wakeObserver = nil
+        }
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
             eventMonitor = nil
@@ -233,6 +308,21 @@ class MenuBarManager: NSObject, ObservableObject {
         statusItem = nil
         statusBarUIManager?.cleanup()
         statusBarUIManager = nil
+
+        // Clean up history tracking dictionaries to prevent memory leaks
+        lastKnownSessionResetTime.removeAll()
+        lastKnownWeeklyResetTime.removeAll()
+        lastKnownAPIResetTime.removeAll()
+        resetJustRecorded.removeAll()
+    }
+
+    /// Cleans up tracking data for a specific profile (called when profile is deleted)
+    func cleanupProfile(_ profileId: UUID) {
+        lastKnownSessionResetTime.removeValue(forKey: profileId)
+        lastKnownWeeklyResetTime.removeValue(forKey: profileId)
+        lastKnownAPIResetTime.removeValue(forKey: profileId)
+        resetJustRecorded.removeValue(forKey: profileId)
+        autoSwitchedProfileIds.remove(profileId)
     }
 
     // MARK: - Profile Observation
@@ -329,7 +419,7 @@ class MenuBarManager: NSObject, ObservableObject {
 
         // Recreate popover with fresh content
         let newPopover = NSPopover()
-        newPopover.contentSize = NSSize(width: 320, height: 600)
+        newPopover.contentSize = Constants.WindowSizes.popoverSize
         newPopover.behavior = .semitransient
         newPopover.animates = true
         newPopover.delegate = self
@@ -355,7 +445,8 @@ class MenuBarManager: NSObject, ObservableObject {
         if !hasUsageCredentials {
             // Create config with no enabled metrics (will trigger default logo)
             displayConfig = MenuBarIconConfiguration(
-                monochromeMode: config.monochromeMode,
+                colorMode: config.colorMode,
+                singleColorHex: config.singleColorHex,
                 showIconNames: config.showIconNames,
                 metrics: config.metrics.map { metric in
                     var updatedMetric = metric
@@ -373,7 +464,10 @@ class MenuBarManager: NSObject, ObservableObject {
             config: displayConfig
         )
 
-        updateAllStatusBarIcons()
+        // Defer icon update to next run loop iteration to let NSStatusBar finalize layout
+        DispatchQueue.main.async { [weak self] in
+            self?.updateAllStatusBarIcons()
+        }
     }
 
     private func restartAutoRefreshWithInterval(_ interval: TimeInterval) {
@@ -389,7 +483,7 @@ class MenuBarManager: NSObject, ObservableObject {
 
     private func setupPopover() {
         let popover = NSPopover()
-        popover.contentSize = NSSize(width: 320, height: 600)
+        popover.contentSize = Constants.WindowSizes.popoverSize
         popover.behavior = .semitransient  // Changed to allow detaching
         popover.animates = true
         popover.delegate = self
@@ -425,8 +519,13 @@ class MenuBarManager: NSObject, ObservableObject {
         let clickedButton: NSStatusBarButton?
         if let button = sender as? NSStatusBarButton {
             clickedButton = button
+        } else if statusBarUIManager?.isInMultiProfileMode == true,
+                  let activeId = profileManager.activeProfile?.id,
+                  let activeButton = statusBarUIManager?.button(for: activeId) {
+            // Multi-profile mode: use the active profile's button
+            clickedButton = activeButton
         } else {
-            // Fallback to primary button for backwards compatibility
+            // Single profile mode: fallback to primary button
             clickedButton = statusBarUIManager?.primaryButton
         }
 
@@ -563,9 +662,32 @@ class MenuBarManager: NSObject, ObservableObject {
         refreshTimer?.invalidate()
         let interval = profileManager.activeProfile?.refreshInterval ?? 30.0
         refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            self?.lastAutoRefreshTime = Date()
             self?.refreshUsage()
         }
+        refreshTimer?.tolerance = interval * 0.1  // 10% tolerance for energy efficiency
         LoggingService.shared.log("Started auto-refresh with interval: \(interval)s")
+    }
+
+    private func setupWakeObserver() {
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            // Debounce: only refresh if at least 10 seconds since last auto-refresh
+            let timeSinceLastRefresh = Date().timeIntervalSince(self.lastAutoRefreshTime)
+            guard timeSinceLastRefresh > 10 else {
+                LoggingService.shared.log("MenuBarManager: Skipping wake refresh (debounce)")
+                return
+            }
+            LoggingService.shared.log("MenuBarManager: Wake from sleep detected, refreshing after delay")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                self?.lastAutoRefreshTime = Date()
+                self?.refreshUsage()
+            }
+        }
     }
 
     private func restartAutoRefresh() {
@@ -593,6 +715,31 @@ class MenuBarManager: NSObject, ObservableObject {
                 self.cachedImageKey = ""
                 self.updateStatusButton(button, usage: self.usage)
             }
+        }
+    }
+
+    private func observeRefreshIntervalChanges() {
+        // Observe the same UserDefaults instance that DataStore uses
+        refreshIntervalObserver = dataStore.userDefaults.observe(\.refreshInterval, options: [.new]) { [weak self] _, change in
+            if let newValue = change.newValue, newValue > 0 {
+                DispatchQueue.main.async {
+                    self?.restartAutoRefresh()
+                }
+            }
+        }
+    }
+
+    private func observeIconStyleChanges() {
+        // Observe icon style changes from settings (now consolidated with menuBarIconConfigChanged)
+        iconStyleObserver = NotificationCenter.default.addObserver(
+            forName: .menuBarIconConfigChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            // Clear cache to force redraw with new style
+            self.cachedImageKey = ""
+            self.updateAllStatusBarIcons()
         }
     }
 
@@ -696,6 +843,39 @@ class MenuBarManager: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Headless Mode (Remote Desktop Support)
+
+    private func setupHeadlessModeObserver() {
+        // Always observe screen changes to support headless Mac setups (Remote Desktop)
+        LoggingService.shared.log("MenuBarManager: Setting up screen change observer for headless support")
+
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleScreenChange()
+        }
+    }
+
+    private func handleScreenChange() {
+        // Only proceed if we have screens now
+        guard !NSScreen.screens.isEmpty else { return }
+
+        // Check if status bar needs retry (button is nil means it failed on headless startup)
+        guard let uiManager = statusBarUIManager else { return }
+
+        if !uiManager.hasValidStatusBar {
+            LoggingService.shared.log("MenuBarManager: Headless mode - display connected, retrying status bar setup (screens: \(NSScreen.screens.count))")
+            setup()
+        }
+    }
+
+    /// Returns whether the status bar has at least one valid button
+    func hasValidStatusBar() -> Bool {
+        return statusBarUIManager?.hasValidStatusBar ?? false
+    }
+
     private func setupMultiProfileMode() {
         let selectedProfiles = profileManager.getSelectedProfiles()
         let config = profileManager.multiProfileConfig
@@ -706,9 +886,11 @@ class MenuBarManager: NSObject, ObservableObject {
             action: #selector(togglePopover)
         )
 
-        // Update icons for all selected profiles with the display config
-        // Use profiles from profileManager to get the latest data
-        statusBarUIManager?.updateMultiProfileButtons(profiles: profileManager.profiles, config: config)
+        // Defer icon update to next run loop iteration to let NSStatusBar finalize layout
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.statusBarUIManager?.updateMultiProfileButtons(profiles: self.profileManager.profiles, config: config)
+        }
 
         LoggingService.shared.log("MenuBarManager: Multi-profile mode enabled with \(selectedProfiles.count) profiles, style=\(config.iconStyle.rawValue)")
 
@@ -747,10 +929,40 @@ class MenuBarManager: NSObject, ObservableObject {
             // Fetch usage for each selected profile
             for profile in selectedProfiles {
                 LoggingService.shared.log("MenuBarManager: Fetching usage for profile '\(profile.name)'")
+
+                // Capture previous usage for reset detection
+                let previousUsage = profile.claudeUsage
+
                 do {
                     let newUsage = try await fetchUsageForProfile(profile)
 
                     await MainActor.run {
+                        // Check for resets before updating usage
+                        self.checkAndRecordSessionReset(
+                            profileId: profile.id,
+                            previousUsage: previousUsage,
+                            newUsage: newUsage
+                        )
+                        self.checkAndRecordWeeklyReset(
+                            profileId: profile.id,
+                            previousUsage: previousUsage,
+                            newUsage: newUsage
+                        )
+
+                        // Record periodic snapshots for history charts (skip if reset just occurred)
+                        let flags = self.resetJustRecorded[profile.id] ?? (session: false, weekly: false)
+
+                        if !flags.session {
+                            UsageHistoryService.shared.recordSessionPeriodic(for: profile.id, usage: newUsage)
+                        }
+
+                        if !flags.weekly {
+                            UsageHistoryService.shared.recordWeeklyPeriodic(for: profile.id, usage: newUsage)
+                        }
+
+                        // Clear reset flags for next cycle
+                        self.resetJustRecorded[profile.id] = (session: false, weekly: false)
+
                         // Save to profile
                         self.profileManager.saveClaudeUsage(newUsage, for: profile.id)
                         LoggingService.shared.log("MenuBarManager: Saved usage for profile '\(profile.name)' - session: \(newUsage.sessionPercentage)%")
@@ -763,6 +975,28 @@ class MenuBarManager: NSObject, ObservableObject {
                 } catch {
                     LoggingService.shared.logError("Failed to refresh profile '\(profile.name)': \(error.localizedDescription)")
                 }
+
+                // Fetch API usage if this profile has API console credentials
+                if let apiSessionKey = profile.apiSessionKey,
+                   let orgId = profile.apiOrganizationId {
+                    do {
+                        let previousAPIUsage = profile.apiUsage
+                        let newAPIUsage = try await apiService.fetchAPIUsageData(organizationId: orgId, apiSessionKey: apiSessionKey)
+                        await MainActor.run {
+                            self.checkAndRecordBillingCycleReset(
+                                profileId: profile.id,
+                                previousUsage: previousAPIUsage,
+                                newUsage: newAPIUsage
+                            )
+                            self.profileManager.saveAPIUsage(newAPIUsage, for: profile.id)
+                            if profile.id == self.profileManager.activeProfile?.id {
+                                self.apiUsage = newAPIUsage
+                            }
+                        }
+                    } catch {
+                        LoggingService.shared.logError("Failed to refresh API usage for profile '\(profile.name)': \(error.localizedDescription)")
+                    }
+                }
             }
 
             // Update all icons once after all profiles are refreshed
@@ -772,23 +1006,48 @@ class MenuBarManager: NSObject, ObservableObject {
                     profiles: self.profileManager.profiles,
                     config: config
                 )
+                self.consecutiveRefreshFailures = 0
+                self.lastRefreshError = nil
+                self.hasCredentialError = false
+                self.lastSuccessfulRefreshTime = Date()
                 self.isRefreshing = false
+
+                // Check auto-switch for the active profile
+                if let activeProfile = self.profileManager.activeProfile,
+                   let activeUsage = activeProfile.claudeUsage {
+                    self.checkAutoSwitchIfNeeded(usage: activeUsage, currentProfile: activeProfile)
+                }
             }
         }
     }
 
     /// Fetches usage data for a specific profile using its credentials
     private func fetchUsageForProfile(_ profile: Profile) async throws -> ClaudeUsage {
-        guard let sessionKey = profile.claudeSessionKey,
-              let orgId = profile.organizationId else {
-            throw AppError(
-                code: .sessionKeyNotFound,
-                message: "Missing credentials for profile '\(profile.name)'",
-                isRecoverable: false
-            )
+        // Priority 1: claude.ai session key (cookie-based)
+        if let sessionKey = profile.claudeSessionKey,
+           let orgId = profile.organizationId {
+            return try await apiService.fetchUsageData(sessionKey: sessionKey, organizationId: orgId)
         }
 
-        return try await apiService.fetchUsageData(sessionKey: sessionKey, organizationId: orgId)
+        // Priority 2: Saved CLI OAuth token from profile
+        if let cliJSON = profile.cliCredentialsJSON,
+           !ClaudeCodeSyncService.shared.isTokenExpired(cliJSON),
+           let accessToken = ClaudeCodeSyncService.shared.extractAccessToken(from: cliJSON) {
+            return try await apiService.fetchUsageData(oauthAccessToken: accessToken)
+        }
+
+        // Priority 3: System Keychain CLI OAuth token
+        if let systemCredentials = try? ClaudeCodeSyncService.shared.readSystemCredentials(),
+           !ClaudeCodeSyncService.shared.isTokenExpired(systemCredentials),
+           let accessToken = ClaudeCodeSyncService.shared.extractAccessToken(from: systemCredentials) {
+            return try await apiService.fetchUsageData(oauthAccessToken: accessToken)
+        }
+
+        throw AppError(
+            code: .sessionKeyNotFound,
+            message: "Missing credentials for profile '\(profile.name)'",
+            isRecoverable: false
+        )
     }
 
     private func setupSingleProfileMode() {
@@ -801,7 +1060,8 @@ class MenuBarManager: NSObject, ObservableObject {
         let displayConfig: MenuBarIconConfiguration
         if !hasUsageCredentials {
             displayConfig = MenuBarIconConfiguration(
-                monochromeMode: config.monochromeMode,
+                colorMode: config.colorMode,
+                singleColorHex: config.singleColorHex,
                 showIconNames: config.showIconNames,
                 metrics: config.metrics.map { metric in
                     var updatedMetric = metric
@@ -814,7 +1074,11 @@ class MenuBarManager: NSObject, ObservableObject {
         }
 
         statusBarUIManager?.setup(target: self, action: #selector(togglePopover), config: displayConfig)
-        updateAllStatusBarIcons()
+
+        // Defer icon update to next run loop iteration to let NSStatusBar finalize layout
+        DispatchQueue.main.async { [weak self] in
+            self?.updateAllStatusBarIcons()
+        }
 
         LoggingService.shared.log("MenuBarManager: Single profile mode enabled")
     }
@@ -852,6 +1116,11 @@ class MenuBarManager: NSObject, ObservableObject {
                 self.isRefreshing = true
             }
 
+            // Capture previous usage BEFORE fetching new data (for reset detection)
+            let previousUsage = await MainActor.run { self.usage }
+            let previousAPIUsage = await MainActor.run { self.apiUsage }
+            let currentProfileId = await MainActor.run { self.profileManager.activeProfile?.id }
+
             // Fetch usage and status in parallel
             async let usageResult = apiService.fetchUsageData()
             async let statusResult = statusService.fetchStatus()
@@ -863,11 +1132,37 @@ class MenuBarManager: NSObject, ObservableObject {
                 let newUsage = try await usageResult
 
                 await MainActor.run {
+                    // Check for resets before updating usage
+                    if let profileId = currentProfileId {
+                        self.checkAndRecordSessionReset(
+                            profileId: profileId,
+                            previousUsage: previousUsage,
+                            newUsage: newUsage
+                        )
+                        self.checkAndRecordWeeklyReset(
+                            profileId: profileId,
+                            previousUsage: previousUsage,
+                            newUsage: newUsage
+                        )
+
+                        // Record periodic snapshots for history charts
+                        UsageHistoryService.shared.recordSessionPeriodic(for: profileId, usage: newUsage)
+                        UsageHistoryService.shared.recordWeeklyPeriodic(for: profileId, usage: newUsage)
+                    }
+
                     self.usage = newUsage
 
                     // Save to active profile instead of global DataStore
                     if let profileId = self.profileManager.activeProfile?.id {
                         self.profileManager.saveClaudeUsage(newUsage, for: profileId)
+                    }
+
+                    // Write statusline cache for instant CLI rendering
+                    if StatuslineService.shared.isInstalled {
+                        StatuslineService.shared.writeUsageCache(
+                            usage: newUsage,
+                            profileName: self.profileManager.activeProfile?.name
+                        )
                     }
 
                     // Update all menu bar icons
@@ -880,6 +1175,9 @@ class MenuBarManager: NSObject, ObservableObject {
                             profileName: profile.name,
                             settings: profile.notificationSettings
                         )
+
+                        // Check if auto-switch should trigger
+                        self.checkAutoSwitchIfNeeded(usage: newUsage, currentProfile: profile)
                     }
 
                     // Record burn rate snapshot
@@ -897,6 +1195,13 @@ class MenuBarManager: NSObject, ObservableObject {
                 ErrorRecovery.shared.recordSuccess(for: .api)
                 usageSuccess = true
 
+                await MainActor.run {
+                    self.consecutiveRefreshFailures = 0
+                    self.lastRefreshError = nil
+                    self.hasCredentialError = false
+                    self.lastSuccessfulRefreshTime = Date()
+                }
+
             } catch {
                 // Convert to AppError and log
                 let appError = AppError.wrap(error)
@@ -905,8 +1210,16 @@ class MenuBarManager: NSObject, ObservableObject {
                 // Record failure for circuit breaker
                 ErrorRecovery.shared.recordFailure(for: .api)
 
-                // Show error to user if this was triggered by session key update
+                // Track error state for UI banners
                 await MainActor.run {
+                    self.consecutiveRefreshFailures += 1
+                    self.lastRefreshError = appError.message
+
+                    // Track credential errors specifically
+                    if appError.code == .apiUnauthorized || appError.code == .sessionKeyExpired {
+                        self.hasCredentialError = true
+                    }
+
                     // Check if this refresh was triggered within last 5 seconds
                     // (indicates user-initiated action like saving session key)
                     if abs(self.lastRefreshTriggerTime.timeIntervalSinceNow) < 5 {
@@ -933,13 +1246,22 @@ class MenuBarManager: NSObject, ObservableObject {
                 LoggingService.shared.log("MenuBarManager: Failed to fetch status - [\(appError.code.rawValue)] \(appError.message)")
             }
 
-            // Fetch API usage if enabled (using active profile's API credentials)
+            // Fetch API usage (using active profile's API credentials)
             if let profile = await MainActor.run(body: { self.profileManager.activeProfile }),
                let apiSessionKey = profile.apiSessionKey,
                let orgId = profile.apiOrganizationId {
                 do {
                     let newAPIUsage = try await apiService.fetchAPIUsageData(organizationId: orgId, apiSessionKey: apiSessionKey)
                     await MainActor.run {
+                        // Check for billing cycle reset before updating usage
+                        if let profileId = currentProfileId {
+                            self.checkAndRecordBillingCycleReset(
+                                profileId: profileId,
+                                previousUsage: previousAPIUsage,
+                                newUsage: newAPIUsage
+                            )
+                        }
+
                         self.apiUsage = newAPIUsage
 
                         // Save to active profile instead of global DataStore
@@ -973,6 +1295,218 @@ class MenuBarManager: NSObject, ObservableObject {
         NotificationManager.shared.sendSuccessNotification()
     }
 
+    // MARK: - Auto-Switch Profile on Session Limit
+
+    /// Checks if the current profile hit 100% and switches to the next available one
+    private func checkAutoSwitchIfNeeded(usage: ClaudeUsage, currentProfile: Profile) {
+        // Guard: feature must be enabled
+        guard SharedDataStore.shared.loadAutoSwitchProfileEnabled() else { return }
+
+        // Guard: need more than 1 profile
+        let profiles = profileManager.profiles
+        guard profiles.count > 1 else { return }
+
+        let profileId = currentProfile.id
+
+        // If usage dropped below 100%, clear the flag (session reset)
+        if usage.effectiveSessionPercentage < 100.0 {
+            autoSwitchedProfileIds.remove(profileId)
+            return
+        }
+
+        // Guard: usage must be >= 100%
+        guard usage.effectiveSessionPercentage >= 100.0 else { return }
+
+        // Guard: don't re-trigger for this profile
+        guard !autoSwitchedProfileIds.contains(profileId) else { return }
+
+        // Mark as triggered
+        autoSwitchedProfileIds.insert(profileId)
+
+        // Find the next available profile
+        guard let nextProfile = findNextAvailableProfile(after: currentProfile) else {
+            LoggingService.shared.log("AutoSwitch: All profiles at 100% or unavailable, staying on '\(currentProfile.name)'")
+            return
+        }
+
+        LoggingService.shared.log("AutoSwitch: Switching from '\(currentProfile.name)' to '\(nextProfile.name)'")
+
+        // Activate the next profile
+        let fromName = currentProfile.name
+        let toName = nextProfile.name
+        Task {
+            await profileManager.activateProfile(nextProfile.id)
+
+            await MainActor.run {
+                // Send notification
+                NotificationManager.shared.sendAutoSwitchNotification(fromProfile: fromName, toProfile: toName)
+
+                // Post notification for UI reactivity
+                NotificationCenter.default.post(name: .autoSwitchProfileTriggered, object: nil)
+            }
+        }
+    }
+
+    /// Finds the next profile with available session capacity, wrapping around
+    private func findNextAvailableProfile(after currentProfile: Profile) -> Profile? {
+        let profiles = profileManager.profiles
+        guard let currentIndex = profiles.firstIndex(where: { $0.id == currentProfile.id }) else { return nil }
+
+        let count = profiles.count
+        for offset in 1..<count {
+            let index = (currentIndex + offset) % count
+            let candidate = profiles[index]
+
+            // Must have usage credentials
+            guard candidate.hasUsageCredentials else { continue }
+
+            // If no saved usage data, treat as available
+            guard let candidateUsage = candidate.claudeUsage else { return candidate }
+
+            // Must be below 100%
+            if candidateUsage.effectiveSessionPercentage < 100.0 {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    // MARK: - Reset Detection for History Recording
+
+    /// Normalizes a date to minute precision for comparison (ignores seconds)
+    private func normalizeToMinute(_ date: Date) -> Date {
+        let calendar = Calendar.current
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return calendar.date(from: components) ?? date
+    }
+
+    /// Checks if a session reset occurred and records a snapshot if so
+    private func checkAndRecordSessionReset(
+        profileId: UUID,
+        previousUsage: ClaudeUsage?,
+        newUsage: ClaudeUsage
+    ) {
+        let lastKnown = lastKnownSessionResetTime[profileId]
+        let newResetTime = normalizeToMinute(newUsage.sessionResetTime)
+
+        // First time seeing this profile - just record the reset time
+        if lastKnown == nil {
+            lastKnownSessionResetTime[profileId] = newResetTime
+            return
+        }
+
+        // Normalize the last known time for comparison
+        let normalizedLastKnown = normalizeToMinute(lastKnown!)
+
+        // Check if reset time changed (indicates a reset occurred)
+        // Use != instead of > to handle clock changes and backward time jumps
+        if newResetTime != normalizedLastKnown {
+            // Reset detected! Record snapshot of the previous usage
+            LoggingService.shared.log("History: Session reset detected for profile \(profileId.uuidString.prefix(8)). Old: \(normalizedLastKnown), New: \(newResetTime)")
+            if let prevUsage = previousUsage {
+                Task { @MainActor in
+                    UsageHistoryService.shared.recordSessionReset(
+                        for: profileId,
+                        previousUsage: prevUsage,
+                        resetTime: prevUsage.sessionResetTime  // Use original reset time, not normalized
+                    )
+                }
+            }
+
+            // Mark that session reset was just recorded to prevent duplicate periodic snapshot
+            var flags = resetJustRecorded[profileId] ?? (session: false, weekly: false)
+            flags.session = true
+            resetJustRecorded[profileId] = flags
+        }
+
+        // Update the last known reset time
+        lastKnownSessionResetTime[profileId] = newResetTime
+    }
+
+    /// Checks if a weekly reset occurred and records a snapshot if so
+    private func checkAndRecordWeeklyReset(
+        profileId: UUID,
+        previousUsage: ClaudeUsage?,
+        newUsage: ClaudeUsage
+    ) {
+        let lastKnown = lastKnownWeeklyResetTime[profileId]
+        let newResetTime = normalizeToMinute(newUsage.weeklyResetTime)
+
+        // First time seeing this profile - just record the reset time
+        if lastKnown == nil {
+            lastKnownWeeklyResetTime[profileId] = newResetTime
+            LoggingService.shared.log("History: Initial weekly reset time for profile \(profileId.uuidString.prefix(8)): \(newResetTime)")
+            return
+        }
+
+        // Normalize the last known time for comparison
+        let normalizedLastKnown = normalizeToMinute(lastKnown!)
+
+        // Check if reset time changed (indicates a reset occurred)
+        // Use != instead of > to handle clock changes and backward time jumps
+        if newResetTime != normalizedLastKnown {
+            // Reset detected! Record snapshot of the previous usage
+            LoggingService.shared.log("History: Weekly reset detected for profile \(profileId.uuidString.prefix(8)). Old: \(normalizedLastKnown), New: \(newResetTime)")
+            if let prevUsage = previousUsage {
+                Task { @MainActor in
+                    UsageHistoryService.shared.recordWeeklyReset(
+                        for: profileId,
+                        previousUsage: prevUsage,
+                        resetTime: prevUsage.weeklyResetTime  // Use original reset time, not normalized
+                    )
+                }
+            }
+
+            // Mark that weekly reset was just recorded to prevent duplicate periodic snapshot
+            var flags = resetJustRecorded[profileId] ?? (session: false, weekly: false)
+            flags.weekly = true
+            resetJustRecorded[profileId] = flags
+        }
+
+        // Update the last known reset time
+        lastKnownWeeklyResetTime[profileId] = newResetTime
+    }
+
+    /// Checks if a billing cycle reset occurred and records a snapshot if so
+    private func checkAndRecordBillingCycleReset(
+        profileId: UUID,
+        previousUsage: APIUsage?,
+        newUsage: APIUsage
+    ) {
+        let lastKnown = lastKnownAPIResetTime[profileId]
+        let newResetTime = normalizeToMinute(newUsage.resetsAt)
+
+        // First time seeing this profile - just record the reset time
+        if lastKnown == nil {
+            lastKnownAPIResetTime[profileId] = newResetTime
+            LoggingService.shared.log("History: Initial API reset time for profile \(profileId.uuidString.prefix(8)): \(newResetTime)")
+            return
+        }
+
+        // Normalize the last known time for comparison
+        let normalizedLastKnown = normalizeToMinute(lastKnown!)
+
+        // Check if reset time changed (indicates a reset occurred)
+        // Use != instead of > to handle clock changes and backward time jumps
+        if newResetTime != normalizedLastKnown {
+            // Reset detected! Record snapshot of the previous usage
+            LoggingService.shared.log("History: Billing cycle reset detected for profile \(profileId.uuidString.prefix(8)). Old: \(normalizedLastKnown), New: \(newResetTime)")
+            if let prevUsage = previousUsage {
+                Task { @MainActor in
+                    UsageHistoryService.shared.recordBillingCycleReset(
+                        for: profileId,
+                        previousUsage: prevUsage,
+                        resetTime: prevUsage.resetsAt  // Use original reset time, not normalized
+                    )
+                }
+            }
+        }
+
+        // Update the last known reset time
+        lastKnownAPIResetTime[profileId] = newResetTime
+    }
+
     @objc private func preferencesClicked() {
         openSettings(section: nil)
     }
@@ -993,25 +1527,15 @@ class MenuBarManager: NSObject, ObservableObject {
             // Temporarily show dock icon for the settings window (like setup wizard)
             NSApp.setActivationPolicy(.regular)
 
-            // Create and show the settings window programmatically
-            let settingsView = section.map { SettingsView(initialSection: $0) } ?? SettingsView()
-            let hostingController = NSHostingController(rootView: settingsView)
-
-            let window = NSWindow(contentViewController: hostingController)
+            // Create and show the settings window
+            let window = SettingsWindowBuilder.makeWindow(size: Constants.WindowSizes.settingsWindow)
             window.title = "Claude Usage - Settings"
-            window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 720, height: 600))
             window.center()
             window.isReleasedWhenClosed = false
-            window.isRestorable = false
-
-            // Set window delegate to clean up reference when closed
             window.delegate = self
 
-            // Store reference
             self.settingsWindow = window
 
-            // Show the window
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
@@ -1046,6 +1570,22 @@ class MenuBarManager: NSObject, ObservableObject {
             self.dashboardWindow = window
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    private func switchToNextProfile() {
+        let profiles = profileManager.profiles
+        guard profiles.count > 1,
+              let currentId = profileManager.activeProfile?.id,
+              let currentIndex = profiles.firstIndex(where: { $0.id == currentId }) else {
+            return
+        }
+
+        let nextIndex = (profiles.index(after: currentIndex)) % profiles.count
+        let nextProfile = profiles[nextIndex]
+
+        Task {
+            await profileManager.activateProfile(nextProfile.id)
         }
     }
 
@@ -1140,6 +1680,63 @@ class MenuBarManager: NSObject, ObservableObject {
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
     }
+
+    // MARK: - Feedback Prompt
+
+    /// Shows the feedback collection prompt window
+    func showFeedbackPrompt() {
+        if let existingWindow = feedbackWindow, existingWindow.isVisible {
+            existingWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        NSApp.setActivationPolicy(.regular)
+
+        let promptView = FeedbackPromptView(
+            onSubmit: { [weak self] _, _, _, _ in
+                SharedDataStore.shared.saveHasSubmittedFeedback(true)
+                // Close after a brief delay to show the thanks state
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    self?.closeFeedbackWindow()
+                }
+            },
+            onRemindLater: { [weak self] in
+                SharedDataStore.shared.saveLastFeedbackPromptDate(Date())
+                self?.closeFeedbackWindow()
+            },
+            onDontAskAgain: { [weak self] in
+                SharedDataStore.shared.saveNeverShowFeedbackPrompt(true)
+                self?.closeFeedbackWindow()
+            }
+        )
+
+        let hostingController = NSHostingController(rootView: promptView)
+
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = ""
+        window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.setContentSize(NSSize(width: 380, height: 420))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        window.level = .floating
+        window.delegate = self
+
+        feedbackWindow = window
+        SharedDataStore.shared.saveLastFeedbackPromptDate(Date())
+
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func closeFeedbackWindow() {
+        feedbackWindow?.close()
+        feedbackWindow = nil
+        NSApp.setActivationPolicy(.accessory)
+    }
 }
 
 // MARK: - NSPopoverDelegate
@@ -1157,14 +1754,23 @@ extension MenuBarManager: NSPopoverDelegate {
         // This prevents the popover from losing its content
         let newContentViewController = createContentViewController()
 
-        let window = NSWindow(contentViewController: newContentViewController)
-        window.title = "app.window.main".localized
-        window.styleMask = [.titled, .closable]  // Close-only, minimal and clean
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 600),
+            styleMask: [.titled, .closable, .fullSizeContentView, .nonactivatingPanel, .hudWindow],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = newContentViewController
+        window.title = ""
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
         window.setContentSize(NSSize(width: 320, height: 600))
         window.isReleasedWhenClosed = false
-        window.level = .floating  // Keep it above other windows
-        window.isRestorable = false  // Don't persist across app restarts
+        window.level = .floating
+        window.isRestorable = false
         window.delegate = self
+        window.backgroundColor = .clear
 
         // Store reference to the detached window
         detachedWindow = window
@@ -1176,9 +1782,12 @@ extension MenuBarManager: NSPopoverDelegate {
 // MARK: - StatusBarUIManagerDelegate
 extension MenuBarManager: StatusBarUIManagerDelegate {
     func statusBarAppearanceDidChange() {
-        // Update cached dark mode state
-        cachedIsDarkMode = NSApp.effectiveAppearance.name == .darkAqua
-        // Update all icons with new appearance
+        // Safe from infinite loops: StatusBarUIManager's observer deduplicates by
+        // appearance name, and setButtonImage() only assigns button.image when the
+        // rendered TIFF data actually changes — so even if setting button.image
+        // triggers effectiveAppearance KVO, the cycle stops immediately.
+        cachedIsDarkMode = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        cachedImageKey = ""
         updateAllStatusBarIcons()
     }
 }

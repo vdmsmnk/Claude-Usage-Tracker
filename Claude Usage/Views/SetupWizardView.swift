@@ -1,6 +1,14 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Setup Mode (Auto-detect vs Manual)
+
+enum SetupMode {
+    case loading
+    case cliDetected(credentials: String)
+    case manualSetup
+}
+
 // MARK: - Wizard State Machine
 
 enum SetupWizardStep: Int, Comparable {
@@ -21,6 +29,7 @@ struct SetupWizardState {
     var selectedOrgId: String? = nil
     var autoStartSessionEnabled: Bool = false
     var showInstructions: Bool = false
+    var showingAuthSheet: Bool = false
 }
 
 /// Professional, native macOS setup wizard with 3-step flow
@@ -30,9 +39,72 @@ struct SetupWizardView: View {
     @State private var hasClaudeCodeCredentials = false
     @State private var isMigrating = false
     @State private var migrationMessage: String?
+    @State private var setupMode: SetupMode = .loading
     private let apiService = ClaudeAPIService()
 
     var body: some View {
+        switch setupMode {
+        case .loading:
+            VStack(spacing: 16) {
+                ProgressView()
+                Text("setup.cli_detecting".localized)
+                    .font(.system(size: 13))
+                    .foregroundColor(.secondary)
+            }
+            .frame(width: 580, height: 680)
+            .onAppear { detectCLICredentials() }
+
+        case .cliDetected(let credentials):
+            CLIDetectedSetupView(
+                credentials: credentials,
+                onStartTracking: { startTrackingWithCLI(credentials: credentials) },
+                onManualSetup: { setupMode = .manualSetup }
+            )
+
+        case .manualSetup:
+            manualSetupBody
+        }
+    }
+
+    /// Detects CLI credentials and sets the appropriate setup mode
+    private func detectCLICredentials() {
+        Task {
+            do {
+                if let credentials = try ClaudeCodeSyncService.shared.readSystemCredentials(),
+                   let _ = ClaudeCodeSyncService.shared.extractAccessToken(from: credentials),
+                   !ClaudeCodeSyncService.shared.isTokenExpired(credentials) {
+                    await MainActor.run {
+                        hasClaudeCodeCredentials = true
+                        setupMode = .cliDetected(credentials: credentials)
+                    }
+                    return
+                }
+            } catch { }
+
+            await MainActor.run {
+                setupMode = .manualSetup
+            }
+        }
+    }
+
+    /// Saves CLI credentials to the active profile and dismisses the wizard
+    private func startTrackingWithCLI(credentials: String) {
+        guard let profileId = ProfileManager.shared.activeProfile?.id else {
+            setupMode = .manualSetup
+            return
+        }
+
+        do {
+            try ClaudeCodeSyncService.shared.syncToProfile(profileId)
+            NotificationCenter.default.post(name: .credentialsChanged, object: nil)
+            dismiss()
+        } catch {
+            LoggingService.shared.logError("Failed to sync CLI credentials: \(error)")
+            setupMode = .manualSetup
+        }
+    }
+
+    private var manualSetupBody: some View {
         VStack(spacing: 0) {
             // Header with logo and progress indicator
             VStack(spacing: 16) {
@@ -178,21 +250,6 @@ struct SetupWizardView: View {
             if let activeProfile = ProfileManager.shared.activeProfile {
                 wizardState.autoStartSessionEnabled = activeProfile.autoStartSessionEnabled
             }
-
-            // Check if Claude Code credentials exist
-            Task {
-                do {
-                    let credentials = try ClaudeCodeSyncService.shared.readSystemCredentials()
-                    await MainActor.run {
-                        hasClaudeCodeCredentials = (credentials != nil)
-                    }
-                } catch {
-                    // If error reading credentials, assume they don't exist
-                    await MainActor.run {
-                        hasClaudeCodeCredentials = false
-                    }
-                }
-            }
         }
     }
 
@@ -253,72 +310,132 @@ struct EnterKeyStepSetup: View {
                         .font(.system(size: 13))
                         .foregroundColor(.secondary)
 
-                    // Action buttons
-                    HStack(spacing: 10) {
-                        Button(action: {
-                            if let url = URL(string: "https://claude.ai") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }) {
-                            HStack {
-                                Image(systemName: "safari")
-                                Text("setup.open_claude_ai".localized)
-                            }
+                    // Primary: Sign in via embedded browser
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("personal.signin_description".localized)
                             .font(.system(size: 12))
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
+                            .foregroundColor(.secondary)
 
-                        Button(action: { wizardState.showInstructions.toggle() }) {
-                            HStack {
-                                Image(systemName: wizardState.showInstructions ? "chevron.up" : "chevron.down")
-                                Text(wizardState.showInstructions ? "setup.hide_instructions".localized : "setup.show_instructions".localized)
+                        Button(action: { wizardState.showingAuthSheet = true }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 12))
+                                Text("personal.signin_button".localized)
+                                    .font(.system(size: 12))
                             }
-                            .font(.system(size: 12))
                             .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.regular)
+                        .disabled(wizardState.validationState == .validating)
                     }
-
-                    // Instructions (expandable)
-                    if wizardState.showInstructions {
-                        VStack(alignment: .leading, spacing: 8) {
-                            InstructionRow(text: "setup.instruction.step1".localized)
-                            InstructionRow(text: "setup.instruction.step2".localized)
-                            InstructionRow(text: "setup.instruction.step3".localized)
-                            InstructionRow(text: "setup.instruction.step4".localized)
-                        }
-                        .padding(16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color(nsColor: .controlBackgroundColor))
+                    .sheet(isPresented: $wizardState.showingAuthSheet) {
+                        ConsoleAuthSheet(
+                            title: "personal.signin_sheet_title".localized,
+                            loginURL: URL(string: "https://claude.ai/login")!,
+                            cookieDomain: "claude.ai",
+                            onSuccess: { result in
+                                wizardState.showingAuthSheet = false
+                                wizardState.sessionKey = result.sessionKey
+                                testConnectionAfterAuth()
+                            },
+                            onCancel: {
+                                wizardState.showingAuthSheet = false
+                            }
                         )
                     }
 
-                    Divider()
+                    // Fallback: Manual session key entry
+                    DisclosureGroup("personal.advanced_manual_key".localized) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Action buttons
+                            HStack(spacing: 10) {
+                                Button(action: {
+                                    if let url = URL(string: "https://claude.ai") {
+                                        NSWorkspace.shared.open(url)
+                                    }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "safari")
+                                        Text("setup.open_claude_ai".localized)
+                                    }
+                                    .font(.system(size: 12))
+                                    .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
 
-                    // Session key input
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("personal.label_session_key".localized)
-                            .font(.system(size: 13, weight: .medium))
+                                Button(action: { wizardState.showInstructions.toggle() }) {
+                                    HStack {
+                                        Image(systemName: wizardState.showInstructions ? "chevron.up" : "chevron.down")
+                                        Text(wizardState.showInstructions ? "setup.hide_instructions".localized : "setup.show_instructions".localized)
+                                    }
+                                    .font(.system(size: 12))
+                                    .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                            }
 
-                        TextField("personal.placeholder_session_key".localized, text: $wizardState.sessionKey)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 12, design: .monospaced))
-                            .padding(10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color(nsColor: .textBackgroundColor))
-                                    .overlay(
+                            // Instructions (expandable)
+                            if wizardState.showInstructions {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    InstructionRow(text: "setup.instruction.step1".localized)
+                                    InstructionRow(text: "setup.instruction.step2".localized)
+                                    InstructionRow(text: "setup.instruction.step3".localized)
+                                    InstructionRow(text: "setup.instruction.step4".localized)
+                                }
+                                .padding(16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color(nsColor: .controlBackgroundColor))
+                                )
+                            }
+
+                            Divider()
+
+                            // Session key input
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("personal.label_session_key".localized)
+                                    .font(.system(size: 13, weight: .medium))
+
+                                TextField("personal.placeholder_session_key".localized, text: $wizardState.sessionKey)
+                                    .textFieldStyle(.plain)
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .padding(10)
+                                    .background(
                                         RoundedRectangle(cornerRadius: 6)
-                                            .strokeBorder(Color.gray.opacity(0.2), lineWidth: 1)
+                                            .fill(Color(nsColor: .textBackgroundColor))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 6)
+                                                    .strokeBorder(Color.gray.opacity(0.2), lineWidth: 1)
+                                            )
                                     )
-                            )
 
-                        Text("setup.paste_session_key".localized)
-                            .font(.system(size: 11))
-                            .foregroundColor(.secondary)
+                                Text("setup.paste_session_key".localized)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            HStack {
+                                Spacer()
+
+                                Button(action: testConnection) {
+                                    if case .validating = wizardState.validationState {
+                                        ProgressView()
+                                            .scaleEffect(0.6)
+                                            .frame(width: 100)
+                                    } else {
+                                        Text("wizard.test_connection".localized)
+                                            .frame(width: 100)
+                                    }
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(wizardState.sessionKey.isEmpty || wizardState.validationState == .validating)
+                            }
+                        }
+                        .padding(.top, 8)
                     }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.secondary)
 
                     // Validation Status
                     if case .success(let message) = wizardState.validationState {
@@ -340,21 +457,35 @@ struct EnterKeyStepSetup: View {
                 .buttonStyle(.bordered)
 
                 Spacer()
-
-                Button(action: testConnection) {
-                    if case .validating = wizardState.validationState {
-                        ProgressView()
-                            .scaleEffect(0.6)
-                            .frame(width: 100)
-                    } else {
-                        Text("wizard.test_connection".localized)
-                            .frame(width: 100)
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(wizardState.sessionKey.isEmpty || wizardState.validationState == .validating)
             }
             .padding(20)
+        }
+    }
+
+    private func testConnectionAfterAuth() {
+        wizardState.validationState = .validating
+
+        Task {
+            do {
+                let organizations = try await apiService.testSessionKey(wizardState.sessionKey)
+
+                await MainActor.run {
+                    wizardState.testedOrganizations = organizations
+                    wizardState.validationState = .success("Connection successful! Found \(organizations.count) organization(s)")
+
+                    withAnimation {
+                        wizardState.currentStep = .selectOrg
+                    }
+                }
+            } catch {
+                let appError = AppError.wrap(error)
+                ErrorLogger.shared.log(appError, severity: .error)
+
+                await MainActor.run {
+                    let errorMessage = "\(appError.message)\n\nError Code: \(appError.code.rawValue)"
+                    wizardState.validationState = .error(errorMessage)
+                }
+            }
         }
     }
 
@@ -789,6 +920,67 @@ struct WizardStatusBox: View {
             RoundedRectangle(cornerRadius: 6)
                 .fill(type.color.opacity(0.1))
         )
+    }
+}
+
+// MARK: - CLI Detected Setup View
+struct CLIDetectedSetupView: View {
+    let credentials: String
+    let onStartTracking: () -> Void
+    let onManualSetup: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+
+            VStack(spacing: 24) {
+                // Terminal icon
+                ZStack {
+                    Circle()
+                        .fill(Color.green.opacity(0.12))
+                        .frame(width: 80, height: 80)
+
+                    Image(systemName: "terminal.fill")
+                        .font(.system(size: 36))
+                        .foregroundColor(.green)
+                }
+
+                // Title
+                Text("setup.cli_detected.title".localized)
+                    .font(.system(size: 24, weight: .bold))
+
+                // Description
+                Text("setup.cli_detected.description".localized)
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 60)
+
+                // Start tracking button
+                Button(action: onStartTracking) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chart.bar.fill")
+                        Text("setup.cli_detected.start".localized)
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                // Manual setup link
+                Button(action: onManualSetup) {
+                    Text("setup.cli_detected.manual".localized)
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer()
+        }
+        .frame(width: 580, height: 680)
     }
 }
 

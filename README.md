@@ -9,14 +9,14 @@
   ![Swift](https://img.shields.io/badge/Swift-5.0+-orange?style=flat-square&logo=swift)
   ![SwiftUI](https://img.shields.io/badge/SwiftUI-5.0+-blue?style=flat-square&logo=swift)
   ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-  ![Version](https://img.shields.io/badge/version-2.3.0-blue?style=flat-square)
-  ![Languages](https://img.shields.io/badge/languages-8-purple?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-3.0.3-blue?style=flat-square)
+  ![Languages](https://img.shields.io/badge/languages-9-purple?style=flat-square)
 
-  <sub>🇬🇧 English • 🇪🇸 Español • 🇫🇷 Français • 🇩🇪 Deutsch • 🇮🇹 Italiano • 🇵🇹 Português • 🇯🇵 日本語 • 🇰🇷 한국어</sub>
+  <sub>🇬🇧 English • 🇪🇸 Español • 🇫🇷 Français • 🇩🇪 Deutsch • 🇮🇹 Italiano • 🇵🇹 Português • 🇯🇵 日本語 • 🇰🇷 한국어 • 🇨🇳 简体中文</sub>
 
-  ### [Download Latest Release (v2.3.0)](https://github.com/hamed-elfayome/Claude-Usage-Tracker/releases/latest/download/Claude-Usage.zip)
+  ### [Download Latest Release (v3.0.3)](https://github.com/hamed-elfayome/Claude-Usage-Tracker/releases/latest/download/Claude-Usage.zip)
 
-  <sub>macOS 14.0+ (Sonoma) | ~4 MB | Native Swift/SwiftUI | Officially Signed</sub>
+  <sub>macOS 14.0+ (Sonoma) | ~6 MB | Native Swift/SwiftUI | Officially Signed</sub>
 
   <a href="https://www.buymeacoffee.com/hamedelfayome" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="40"></a>
 </div>
@@ -30,16 +30,20 @@ Claude Usage Tracker is a lightweight, native macOS menu bar application that pr
 ### Key Capabilities
 
 - **Multi-Profile Support**: Manage unlimited Claude accounts with isolated credentials and settings
-- **Multi-Profile Display**: Monitor all profiles simultaneously in the menu bar (NEW in v2.3.0)
+- **Multi-Profile Display**: Monitor all profiles simultaneously in the menu bar
 - **Claude Code Integration**: Sync CLI accounts and auto-switch credentials when changing profiles
-- **Real-Time Monitoring**: Track session, weekly, and API console usage per profile
-- **Customizable Interface**: 5 icon styles + monochrome mode + remaining/used percentage toggle
-- **Smart Automation**: Auto-start sessions (per-profile background service), threshold notifications
-- **Developer Tools**: Terminal statusline integration with automatic profile updates
+- **Real-Time Monitoring**: Track session, weekly, API console usage, and API costs per profile
+- **Usage History**: Interactive charts tracking session, weekly, and billing data over time
+- **Global Shortcuts**: System-wide keyboard shortcuts (no Accessibility permission)
+- **Headless Mode**: Works on headless Macs via Remote Desktop
+- **Customizable Interface**: 5 icon styles + 3 color modes (Multi-Color/Greyscale/Single Color) + remaining/used percentage toggle
+- **Smart Automation**: Auto-start sessions, auto-switch profiles, threshold notifications
+- **Developer Tools**: Terminal statusline integration with model, context, profile display, pace markers, and color modes
 - **Privacy-First**: Local storage, no telemetry, no cloud sync
 - **Native Performance**: Lightweight Swift/SwiftUI design for macOS
 
 <div align="center">
+  <img src=".github/settings.gif" alt="Quick Walkthrough" width="600">
   <img src=".github/icon.jpg" alt="Menu Bar Icon" height="180">
   <img src=".github/popover.png" alt="Popover Interface" width="200">
 
@@ -47,24 +51,33 @@ Claude Usage Tracker is a lightweight, native macOS menu bar application that pr
 
   <img src=".github/statusline.png" alt="Claude Code Statusline">
   <br>
-  <sub>Live terminal statusline showing directory, branch, and color-coded usage</sub>
+  <sub>Live terminal statusline showing directory, branch, model, context, and color-coded usage</sub>
 </div>
 
 ---
 
 ## What's New
 
-- **v2.3.0 - Multi-Profile Menu Bar Display (2026-01-23)**:
-  - **Multi-profile menu bar display**: Monitor all your Claude accounts simultaneously in the menu bar
-  - **Remaining vs. used percentage**: Choose to display remaining budget instead of used percentage
-  - **Unified usage calculations**: Centralized logic with intelligent color adaptation
-  - **Enhanced icon rendering**: Per-profile icons with independent styling and settings
+- **v3.0.3 (2026-03-10)**: 6-tier pace system (Comfortable → Runaway) with colored pace markers on progress bars, 3 color modes (Multi-Color/Greyscale/Single Color) for menu bar and statusline, label toggles (Ctx/Usage/Reset), 24-hour time format, terminal-matching preview colors, CPU spin-loop fix in menu bar rendering
 
-- **v2.2.3** – Improved setup wizard with smart banners
-- **v2.2.2** – CLI OAuth authentication fallback, simplified auto-start
+- **v3.0.2 (2026-03-10)**: API cost tracking with daily chart, browser-based authentication (WKWebView sign-in), rate limit header usage for CLI OAuth, auto-sizing popover, 3-way time display picker, adaptive green color, session key expiry tracking & notifications
+
+- **v3.0.1 (2026-03-08)**: Popover settings tab (remaining time toggle), multi-display CPU fix
+
+- **v3.0.0 - Major Release (2026-03-08)**:
+  - **Headless mode**: Remote Desktop support for headless Mac environments
+  - **Usage history**: Interactive timeline charts with export to JSON/CSV
+  - **Global keyboard shortcuts**: Configurable hotkeys (no Accessibility permission needed)
+  - **Auto-switch profiles**: Automatically switch when session limit reached
+  - **Borderless settings window**: Full vibrancy design with custom traffic lights
+  - **6 new statusline components**: Model name, context window, profile name, and more
+  - **Time-elapsed markers & pace-aware coloring**: Smart progress indicators
+  - **Network debug view**: Timed capture with request/response detail viewer
+  - **Simplified Chinese** (9th language)
+  - **12 ported improvements** from novastate fork including CLI auto-detection, wake-from-sleep refresh, and custom notification thresholds
+
+- **v2.3.0** – Multi-profile menu bar display, remaining percentage toggle
 - **v2.2.0** – Multi-profile management, CLI integration, Korean language
-- **v2.1.2** – Statusline improvements, organization ID optimization
-- **v2.1.1** – Session timer countdown in menu bar
 - **v2.1.0** – 3-step setup wizard, smart organization preservation
 - **v2.0.0** – Apple code signing, automatic updates, Keychain security
 
@@ -83,6 +96,7 @@ Before installing Claude Usage Tracker, ensure you have:
 
 **Authentication** (choose one method):
 - **Easiest**: [Claude Code](https://claude.com/claude-code) installed and logged in - App automatically uses CLI credentials (v2.2.2+)
+- **Browser Sign-In**: Sign in via the built-in browser — session key extracted automatically (v3.0.2+)
 - **Manual**: Web browser access to extract session key from claude.ai (Chrome, Safari, Firefox, etc.)
 
 **Note**: For terminal statusline integration, you'll still need to manually configure a session key even if using Claude Code OAuth
@@ -133,7 +147,7 @@ brew uninstall --cask claude-usage-tracker
 
 ```bash
 # Clone the repository
-git clone https://github.com/alexbartok/Claude-Usage-Tracker.git
+git clone https://github.com/hamed-elfayome/Claude-Usage-Tracker.git
 cd Claude-Usage-Tracker
 
 # Open in Xcode
@@ -160,9 +174,20 @@ open "Claude Usage.xcodeproj"
    - Click the menu bar icon
    - You should see your usage statistics immediately
 
-#### Option B: Manual Setup with Session Key
+#### Option B: Browser Sign-In (v3.0.2+)
 
-If you prefer manual configuration or don't use Claude Code:
+If you don't use Claude Code, sign in directly through the app:
+
+1. **Click the menu bar icon** and select "Settings"
+2. **Navigate to "Personal Usage"** tab
+3. **Click "Sign in to Claude.ai"** — an embedded browser opens
+4. **Log in** with your Claude.ai credentials (email, Google SSO, etc.)
+5. **Session key is extracted automatically** — the app validates and saves it
+6. **Select your organization** from the list and confirm
+
+#### Option C: Manual Setup with Session Key
+
+If you prefer manual configuration:
 
 **Step 1: Extract Your Session Key**
 
@@ -185,11 +210,10 @@ If you prefer manual configuration or don't use Claude Code:
 
 1. **Click the menu bar icon** and select "Settings"
 2. **Navigate to "Personal Usage"** tab
-3. **3-Step Wizard** guides you through setup:
-   - **Step 1**: Paste your session key and click "Test Connection"
-   - **Step 2**: Select your Claude organization from the list
-   - **Step 3**: Review and click "Save Configuration"
-4. **Wait for confirmation** (success message appears)
+3. **Expand "Advanced: Manual Session Key"**
+4. **Paste your session key** and click "Test Connection"
+5. **Select your organization** from the list
+6. **Review and click "Save Configuration"**
 
 **Step 3: Verify It's Working**
 
@@ -202,10 +226,10 @@ If you prefer manual configuration or don't use Claude Code:
 #### Next Steps
 
 - **Customize Icon**: Go to Settings → Appearance to choose your preferred menu bar style
-- **Su**: Go to Settings → Appearance to choose your preferred menu bar style
 - **Enable Notifications**: Settings → Notifications to get threshold alerts
 - **Auto-Start Sessions**: Settings → Session Management to enable automatic session initialization
 - **Terminal Integration**: Settings → Claude Code to set up statusline (requires session key configuration)
+- **Keyboard Shortcuts**: Settings → Shortcuts to configure global hotkeys
 
 ---
 
@@ -231,13 +255,13 @@ After creating the file, launch the app and it will automatically detect the ses
 
 **New in v2.2.0**: Claude Usage Tracker now supports unlimited profiles, allowing you to manage multiple Claude accounts seamlessly with automatic credential switching.
 
-**New in v2.3.0**: Multi-profile menu bar display lets you monitor all your profiles simultaneously!
+**New in v3.0.0**: Auto-switch profiles when session limit reached, usage history tracking, and global keyboard shortcuts!
 
 ### Features
 
 #### Profile Management
 - **Unlimited Profiles**: Create as many profiles as needed for different Claude accounts
-- **Multi-Profile Display**: Show all profiles in the menu bar at once (v2.3.0)
+- **Multi-Profile Display**: Show all profiles in the menu bar at once
   - Toggle between Single mode (active profile only) and Multi mode (all profiles)
   - Each profile displays with its own icon style and settings
   - Click any profile icon to view its usage details
@@ -305,23 +329,27 @@ Access profile switcher in multiple places:
 
 ### Usage Tracking & Monitoring
 - Real-time monitoring of 5-hour session, weekly limits, and Opus-specific usage
-- API console usage tracking for comprehensive visibility
+- API console usage tracking with monthly cost dashboard and daily cost chart
+- Per-API-key cost breakdown with model-level detail
 - Extra usage cost tracking for Claude Extra subscribers
-- Color-coded indicators (green/orange/red) based on consumption levels
-- Smart countdown timers for session and weekly resets
+- Color-coded indicators (adaptive green/orange/red) based on consumption levels
+- Smart countdown timers for session and weekly resets with 3-way display (time, remaining, or both)
 
 ### Menu Bar & Interface
 - **5 Customizable Icon Styles**: Battery, Progress Bar, Percentage Only, Icon with Bar, Compact
 - **Multi-Metric Icons**: Display separate icons for session, weekly, and api usage simultaneously
-- **Monochrome Mode**: Optional black & white aesthetic
+- **3 Color Modes**: Multi-Color (threshold-based), Greyscale (adapts to appearance), Single Color (custom hex)
+- **6-Tier Pace System**: Pace markers colored by projected usage (green/teal/yellow/orange/red/purple)
 - **Interactive Popover**: One-click access with detachable floating window capability
 - **Live Status Indicator**: Real-time Claude system status from status.claude.com
-- **Multi-Language Support**: 6 languages (English, Spanish, French, German, Italian, Portuguese)
+- **Multi-Language Support**: 9 languages (English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, Simplified Chinese)
 - Adaptive colors for light/dark mode
 
 ### Automation & Intelligence
 - **Auto-Start Sessions**: Automatically initialize new sessions when usage resets to 0%
-- **Smart Notifications**: Threshold alerts at 75%, 90%, and 95% usage
+- **Auto-Switch Profiles**: Automatically switch to next profile at session limit
+- **Wake-from-Sleep Refresh**: Auto-refresh after waking with debounce
+- **Smart Notifications**: Threshold alerts at 75%, 90%, 95% + custom thresholds with sound picker
 - **Network Monitoring**: Auto-detect connectivity changes and handle offline scenarios
 - **Launch at Login**: System-level auto-start option
 - **Configurable Refresh**: Set intervals from 5 to 120 seconds
@@ -329,7 +357,13 @@ Access profile switcher in multiple places:
 
 ### Developer Integration
 - **Claude Code Terminal Statusline**: Real-time usage in your terminal
-- Customizable components: directory, git branch, usage percentage, progress bar, reset timer
+- Customizable components: directory, git branch, model name, context window, profile name, usage percentage, progress bar, pace marker, reset timer
+- **3 color modes**: Multi-Color, Greyscale, Single Color (custom hex) for statusline
+- **Pace marker**: 6-tier colored marker on progress bar showing projected usage pace
+- **Label toggles**: Show/hide "Ctx:", "Usage:", "Reset:" prefixes
+- **24-hour time**: Optional 24-hour format for reset time
+- Terminal-matching preview with ANSI-equivalent colors
+- Instant rendering via usage cache (no startup delay)
 - One-click automated installation
 - Live preview before applying changes
 
@@ -361,7 +395,8 @@ Click the menu bar icon to access:
 - **Session Usage**: 5-hour rolling window percentage and reset time
 - **Weekly Usage**: Overall weekly consumption across all models
 - **Opus Usage**: Weekly Opus-specific usage (if applicable)
-- **Quick Actions**: Refresh, Settings, and Quit
+- **API Cost**: Monthly cost with daily chart and per-key breakdown (if Console configured)
+- **Quick Actions**: Refresh and Settings
 
 ### Settings
 
@@ -376,19 +411,22 @@ Access comprehensive settings through the menu bar popover → Settings button. 
 
 #### Claude.AI (Credentials)
 Configure your Claude.ai personal account:
+- **Browser Sign-In**: Sign in via embedded browser to extract session key automatically (v3.0.2+)
 - **3-Step Setup Wizard**: Guided session key configuration
   - Non-destructive connection testing
   - Visual organization selector
   - Configuration summary with preview
+- **Manual Key Entry**: Advanced option under disclosure group for direct session key input
 - **Smart Updates**: Organization preserved when re-entering same key
-- **Quick Access**: One-click link to claude.ai
 
 #### API Console (Credentials)
 Configure API console usage tracking:
-- **API Session Key**: Set your API authentication key
+- **Browser Sign-In**: Sign in via embedded browser for Anthropic Console (v3.0.2+)
+- **API Session Key**: Set your API authentication key (manual fallback)
 - **Organization ID**: Configure organization for API tracking
 - **Dual Tracking**: Monitor both web and API usage simultaneously
-- **API Billing**: View API console usage costs
+- **API Billing**: View API console spend, prepaid credits, and monthly cost breakdown
+- **Session Key Expiry**: Visual status indicator showing when your session key expires
 
 #### CLI Account (Credentials)
 Sync Claude Code CLI credentials:
@@ -405,8 +443,9 @@ Customize menu bar icon per profile:
   - Percentage Only (text-only minimalist)
   - Icon with Bar (Claude icon + progress)
   - Compact (space-efficient)
-- **Monochrome Mode**: Toggle black & white icon style
-- **Percentage Display Mode** (NEW in v2.3.0): Toggle between used/remaining percentage
+- **3 Color Modes**: Multi-Color (threshold-based), Greyscale (adapts to appearance), Single Color (custom hex)
+- **Pace Marker**: Colored time marker on progress bars showing projected usage pace (6 tiers)
+- **Percentage Display Mode**: Toggle between used/remaining percentage
   - Show "75% used" or "25% remaining" - your choice
   - Color coding automatically adapts (green for high remaining, red for low)
   - Helps focus on budget left rather than budget spent
@@ -417,7 +456,7 @@ Per-profile behavior configuration:
 - **Refresh Interval**: Configure auto-refresh rate (5-300 seconds)
 - **Auto-Start Sessions**: Enable/disable automatic session initialization on reset
 - **Model Selection**: Uses the most cost-effective model available
-- **Notifications**: Per-profile threshold alerts (75%, 90%, 95%)
+- **Notifications**: Per-profile threshold alerts (75%, 90%, 95%) + custom thresholds with sound picker
 
 ### App-Wide Settings
 
@@ -427,22 +466,28 @@ Create and manage multiple profiles:
 - **Rename Profiles**: Customize profile names
 - **Delete Profiles**: Remove unused profiles (minimum 1 required)
 - **Profile List**: View all profiles with credential status indicators
-- **Display Mode Toggle** (NEW in v2.3.0): Switch between Single and Multi mode
+- **Display Mode Toggle**: Switch between Single and Multi mode
   - Single Mode: Show only the active profile in menu bar
   - Multi Mode: Show all profiles simultaneously in menu bar
+- **Auto-Switch Profile**: Automatically switch to next available profile when session limit reached
 
 #### Language
 Application language preferences:
-- **Language Selection**: Choose from 8 supported languages
+- **Language Selection**: Choose from 9 supported languages
 - **Live Updates**: Interface updates immediately when language changes
-- Supported: English, Spanish, French, German, Italian, Portuguese, Japanese, Korean
+- Supported: English, Spanish, French, German, Italian, Portuguese, Japanese, Korean, Simplified Chinese
 
 #### Claude Code (Statusline)
 Terminal integration (app-wide):
-- **Component Selection**: Choose what to display (directory, branch, usage, progress bar, reset time)
-- **Live Preview**: See exact statusline format before installing
+- **Component Selection**: Choose what to display (directory, branch, model name, context window, profile name, usage, progress bar, pace marker, reset time)
+- **Color Mode**: Multi-Color, Greyscale, or Single Color with custom hex picker
+- **Pace Marker**: 6-tier colored marker showing projected usage pace on progress bar
+- **Label Toggles**: Show/hide "Ctx:", "Usage:", "Reset:" prefixes for compact display
+- **24-Hour Time**: Optional 24-hour format for reset time
+- **Live Preview**: Terminal-matching preview with ANSI-equivalent colors
 - **One-Click Install**: Automated script installation to `~/.claude/`
 - **Automatic Updates**: Statusline updates when switching profiles
+- **Usage Cache**: Instant CLI rendering via cached usage data
 - See [Claude Code Integration](#claude-code-integration) section for detailed setup
 
 #### Updates
@@ -461,7 +506,7 @@ Application information:
 
 ## Claude Code Integration
 
-Bring real-time Claude usage monitoring directly into your terminal with Claude Code statusline integration! Display your current usage percentage, git branch, and working directory without leaving your development workflow.
+Bring real-time Claude usage monitoring directly into your terminal with Claude Code statusline integration! Display your current usage percentage, model name, context window, profile name, git branch, and working directory without leaving your development workflow.
 
 ### What is Claude Code?
 
@@ -491,12 +536,19 @@ Bring real-time Claude usage monitoring directly into your terminal with Claude 
    - Toggle on/off the components you want to see:
      - **Directory name**: Shows current working directory
      - **Git branch**: Displays current branch with ⎇ icon
+     - **Model name**: Shows current model (Opus, Sonnet)
+     - **Profile name**: Shows active profile name
+     - **Context window**: Shows context usage as percentage or token count
      - **Usage statistics**: Shows session percentage with color coding
      - **Progress bar**: Visual 10-segment indicator (optional when usage is enabled)
+     - **Pace marker**: Colored `┃` on progress bar at elapsed time position (6-tier pace colors)
+     - **Reset time**: When your session resets (12h or 24h format)
+   - **Color mode**: Choose Multi-Color, Greyscale, or Single Color
+   - **Label toggles**: Show/hide "Ctx:", "Usage:", "Reset:" prefixes
 
 3. **Preview Your Statusline**
-   - The live preview shows exactly how it will appear
-   - Example: `claude-usage │ ⎇ main │ Usage: 25% ▓▓░░░░░░░░`
+   - The live preview shows exactly how it will appear with terminal-matching ANSI colors
+   - Example: `claude-usage │ ⎇ main │ Opus │ Work │ Ctx: 48% │ Usage: 25% ▓▓┃░░░░░░░ → Reset: 3:45 PM`
 
 4. **Apply Configuration**
    - Click "Apply" button
@@ -526,19 +578,36 @@ All scripts are set with secure permissions (755) and only read your existing se
 |-----------|-------------|---------|
 | Directory | Current directory name | `claude-usage` |
 | Git Branch | Active git branch | `⎇ main` |
-| Usage | Session percentage | `Usage: 25%` |
+| Model | Current model name | `Opus` |
+| Profile | Active profile name | `Work` |
+| Context | Context window usage | `Ctx: 48%` or `96K` |
+| Usage | Session percentage | `Usage: 25%` or `25%` |
 | Progress Bar | 10-segment visual indicator | `▓▓░░░░░░░░` |
-| Reset Time | When session resets | `→ Reset: 3:45 PM` |
+| Pace Marker | Colored marker at elapsed time position | `▓▓┃░░░░░░░` |
+| Reset Time | When session resets | `→ Reset: 3:45 PM` or `→ 15:45` |
 
 #### Color Coding
 
-Usage percentage is color-coded with a 10-level gradient:
+**Usage bar** is color-coded with a 10-level gradient:
 - **0-10%**: Dark green
 - **11-30%**: Green shades
 - **31-50%**: Yellow-green transitioning to olive
 - **51-70%**: Yellow to orange
 - **71-90%**: Dark orange to red
 - **91-100%**: Deep red
+
+**Pace marker** uses a 6-tier system based on projected end-of-period usage:
+- **Comfortable** (projected <50%): Green
+- **On Track** (50-75%): Teal
+- **Warming** (75-90%): Yellow
+- **Pressing** (90-100%): Orange
+- **Critical** (100-120%): Red
+- **Runaway** (>120%): Purple
+
+**Color modes** (applies to both menu bar and statusline):
+- **Multi-Color**: Full color palette (default)
+- **Greyscale**: No colors, adapts to system theme
+- **Single Color**: All elements use your custom hex color
 
 #### Disabling Statusline
 
@@ -576,19 +645,19 @@ chmod 755 ~/.claude/statusline-command.sh
 
 ### Example Statuslines
 
-With all components enabled:
+With all components enabled (Multi-Color mode):
 ```
-my-project │ ⎇ feature/new-ui │ Usage: 47% ▓▓▓▓▓░░░░░ → Reset: 4:15 PM
-```
-
-Minimal (usage only):
-```
-Usage: 12% ▓░░░░░░░░░
+my-project │ ⎇ feature/new-ui │ Opus │ Work │ Ctx: 48% │ Usage: 47% ▓▓▓▓┃░░░░░ → Reset: 4:15 PM
 ```
 
-Directory and branch only:
+Compact (labels hidden, 24h time):
 ```
-backend-api │ ⎇ develop
+my-project │ ⎇ develop │ 12% ▓┃░░░░░░░░ → 16:15
+```
+
+Model and context only:
+```
+Sonnet │ Ctx: 96K │ Usage: 25%
 ```
 
 ## Architecture
@@ -690,7 +759,10 @@ If icons briefly flash to zero during refresh:
 
 ### Session Key Expired
 
-Session keys may expire after a period of time. Extract a new key from claude.ai and update it in Settings → Personal Usage using the wizard.
+Session keys may expire after a period of time. You'll receive a notification 24 hours before expiry (v3.0.2+). To refresh:
+1. Go to Settings → Personal Usage (or API Console)
+2. Click "Sign in to Claude.ai" (or "Sign in to Anthropic Console") to re-authenticate via the built-in browser
+3. Or expand "Advanced: Manual Session Key" to paste a new key manually
 
 ### Updates Not Working
 
@@ -706,6 +778,19 @@ If automatic updates aren't working:
 <img src="https://contrib.rocks/image?repo=hamed-elfayome/Claude-Usage-Tracker" alt="Contributors" height="30px" />
 
 This project is built for the community — everyone is welcome
+
+### Special Thanks
+
+A huge thank you to everyone who opened pull requests. Many features in v3.0.0 were inspired by or ported from community PRs that couldn't be merged directly due to the scale of this release and resulting conflicts. Your code, ideas, and effort made this release possible:
+
+<a href="https://github.com/novastate"><img src="https://github.com/novastate.png" width="40" height="40" alt="novastate" title="novastate"></a>
+<a href="https://github.com/heathdutton"><img src="https://github.com/heathdutton.png" width="40" height="40" alt="heathdutton" title="heathdutton"></a>
+<a href="https://github.com/tsvikas"><img src="https://github.com/tsvikas.png" width="40" height="40" alt="tsvikas" title="tsvikas"></a>
+<a href="https://github.com/kynoptic"><img src="https://github.com/kynoptic.png" width="40" height="40" alt="kynoptic" title="kynoptic"></a>
+<a href="https://github.com/bezlant"><img src="https://github.com/bezlant.png" width="40" height="40" alt="bezlant" title="bezlant"></a>
+<a href="https://github.com/trickart"><img src="https://github.com/trickart.png" width="40" height="40" alt="trickart" title="trickart"></a>
+<a href="https://github.com/Ali-Aldahmani"><img src="https://github.com/Ali-Aldahmani.png" width="40" height="40" alt="Ali-Aldahmani" title="Ali-Aldahmani"></a>
+<a href="https://github.com/cuvitx"><img src="https://github.com/cuvitx.png" width="40" height="40" alt="cuvitx" title="cuvitx"></a>
 
 ## Contributing
 

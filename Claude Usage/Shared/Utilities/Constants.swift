@@ -74,11 +74,18 @@ enum Constants {
         }
 
         static var claudeDirectory: URL {
-            homeDirectory.appendingPathComponent(".claude")
+            if let configDir = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"] {
+                return URL(fileURLWithPath: configDir)
+            }
+            return homeDirectory.appendingPathComponent(".claude")
         }
 
         static var projectsDirectory: URL {
             claudeDirectory.appendingPathComponent("projects")
+        }
+
+        static var credentialsFile: URL {
+            claudeDirectory.appendingPathComponent(".credentials.json")
         }
     }
 
@@ -135,6 +142,9 @@ enum Constants {
     // Session window (5 hours in seconds)
     static let sessionWindow: TimeInterval = 5 * 60 * 60
 
+    // Weekly window (7 days in seconds)
+    static let weeklyWindow: TimeInterval = 7 * 24 * 60 * 60
+
     // Weekly limit (tokens)
     static let weeklyLimit = 1_000_000
 
@@ -154,6 +164,12 @@ enum Constants {
         static let reminderInterval: TimeInterval = 10 * 24 * 60 * 60  // 10 days (between 7-14 days)
     }
 
+    // Feedback prompt timing (in seconds)
+    enum FeedbackPromptTiming {
+        static let initialDelay: TimeInterval = 7 * 24 * 60 * 60  // 7 days
+        static let reminderInterval: TimeInterval = 7 * 24 * 60 * 60  // 7 days
+    }
+
     // API Endpoints
     enum APIEndpoints {
         static let claudeBase = "https://claude.ai/api"
@@ -170,7 +186,7 @@ enum Constants {
 
     // Window Sizes
     enum WindowSizes {
-        static let settingsWindow = NSSize(width: 720, height: 600)
+        static let settingsWindow = NSSize(width: 720, height: 750)
         static let popoverSize = NSSize(width: 420, height: 620)
     }
 

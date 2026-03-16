@@ -8,6 +8,11 @@ struct ClaudeUsage: Codable, Equatable {
     var sessionPercentage: Double
     var sessionResetTime: Date
 
+    /// Returns 0% if the 5-hour session window has expired, otherwise the raw percentage.
+    var effectiveSessionPercentage: Double {
+        sessionResetTime < Date() ? 0.0 : sessionPercentage
+    }
+
     // Weekly data (all models)
     var weeklyTokensUsed: Int
     var weeklyLimit: Int
@@ -28,13 +33,17 @@ struct ClaudeUsage: Codable, Equatable {
     var costLimit: Double?
     var costCurrency: String?
 
+    // Overage credit grant balance
+    var overageBalance: Double?
+    var overageBalanceCurrency: String?
+
     // Metadata
     var lastUpdated: Date
     var userTimezone: TimeZone
 
     /// Remaining percentage (100 - used percentage)
     var remainingPercentage: Double {
-        max(0, 100 - sessionPercentage)
+        max(0, 100 - effectiveSessionPercentage)
     }
 
     /// Returns the status level based on remaining percentage (like Mac battery indicator)
@@ -74,6 +83,8 @@ struct ClaudeUsage: Codable, Equatable {
             costUsed: nil,
             costLimit: nil,
             costCurrency: nil,
+            overageBalance: nil,
+            overageBalanceCurrency: nil,
             lastUpdated: Date(),
             userTimezone: .current
         )

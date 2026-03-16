@@ -68,6 +68,8 @@
 "menubar.used" = "Utilizzato";
 "menubar.remaining" = "Rimanente";
 "menubar.resets_time" = "Si azzera %@";
+"menubar.resets_in" = "Ripristino tra %@";
+"menubar.resets_both" = "Ripristino tra %@ (%@)";
 "menubar.click_status" = "Clicca per aprire status.claude.com";
 
 /* ==================== */
@@ -218,6 +220,16 @@
 "notification.opus_critical.message" = "Hai utilizzato %@ del limite settimanale Opus! %@";
 "notification.enabled.title" = "Notifiche Abilitate";
 "notification.enabled.message" = "Ora riceverai avvisi al 75%, 90% e 95% delle soglie di utilizzo, più notifiche di ripristino sessione.";
+"notification.profile_auto_switched.title" = "Profilo cambiato automaticamente";
+"notification.profile_auto_switched.message" = "%@ → %@ per limite di sessione raggiunto";
+
+/* ==================== */
+/* MARK: - Auto-Switch Profile */
+/* ==================== */
+"auto_switch.title" = "Cambio automatico profilo";
+"auto_switch.subtitle" = "Cambia automaticamente quando il limite di sessione viene raggiunto";
+"auto_switch.enable_title" = "Attiva cambio automatico";
+"auto_switch.enable_description" = "Quando il profilo attivo raggiunge il 100% di utilizzo della sessione, passare automaticamente al profilo disponibile successivo";
 
 /* ==================== */
 /* MARK: - Error Messages */
@@ -323,10 +335,15 @@
 "claudecode.subtitle" = "Personalizza la visualizzazione della barra di stato del terminale";
 "claudecode.preview_label" = "Anteprima dal Vivo";
 "claudecode.preview_description" = "Così apparirà la tua barra di stato in Claude CLI";
+"claudecode.component_model" = "Nome del modello";
 "claudecode.component_directory" = "Nome directory";
 "claudecode.component_branch" = "Branch Git";
+"claudecode.component_context" = "Finestra di contesto";
+"claudecode.component_context_tokens" = "Mostra come token (invece di %)";
 "claudecode.component_usage" = "Statistiche utilizzo";
 "claudecode.component_progressbar" = "Barra di progresso";
+"claudecode.component_pace_marker" = "Indicatore di ritmo";
+"claudecode.pace_marker_info" = "Mostra un segno colorato nella posizione del tempo trascorso";
 "claudecode.component_resettime" = "Ora di ripristino";
 "claudecode.requirement_sessionkey" = "• Chiave di sessione configurata in Credenziali → scheda Claude.ai";
 "claudecode.requirement_restart" = "• Riavvia Claude CLI dopo aver applicato le modifiche";
@@ -408,6 +425,14 @@
 "appearance.show_labels_description" = "Visualizza etichette prefisso (S:, W:, API:) per ogni metrica";
 "appearance.show_remaining_title" = "Mostra Percentuale Rimanente";
 "appearance.show_remaining_description" = "Visualizza la capacità rimanente invece della percentuale utilizzata (come la batteria macOS)";
+"appearance.pace_marker_section_title" = "Marcatore di Ritmo";
+"appearance.pace_marker_section_subtitle" = "Monitora il ritmo di utilizzo rispetto ai periodi di reset";
+"appearance.show_time_marker_title" = "Mostra marcatore tempo";
+"appearance.show_time_marker_description" = "Mostra un segno sulle barre di avanzamento che indica quanto tempo del periodo è trascorso";
+"appearance.show_pace_marker_title" = "Colora marcatore per ritmo";
+"appearance.show_pace_marker_description" = "Colora il marcatore del tempo in base al ritmo di utilizzo previsto (verde → viola). Si applica alle metriche di sessione e settimanali.";
+"appearance.pace_coloring_title" = "Colori barra per ritmo";
+"appearance.pace_coloring_description" = "Colora le barre di avanzamento in base al ritmo previsto invece del livello di utilizzo attuale. Prevede se raggiungerai i limiti entro la fine del periodo.";
 "appearance.multiprofile_locked_title" = "Impostazioni Aspetto Bloccate";
 "appearance.multiprofile_locked_description" = "Queste impostazioni sono disabilitate mentre la Visualizzazione Multi-Profilo è attiva. Ogni profilo usa la propria apparenza in modalità multi-profilo.";
 "appearance.disable_multiprofile" = "Disattiva Visualizzazione Multi-Profilo";
@@ -439,6 +464,8 @@
 "api.single_organization" = "Singola organizzazione trovata e selezionata automaticamente";
 "claudecode.button_apply" = "Applica";
 "claudecode.button_reset" = "Ripristina";
+"claudecode.component_profile" = "Nome profilo";
+"claudecode.context_info" = "Il contesto può mostrare ~80-95% invece di 100% — Claude comprime automaticamente prima del limite e i token di output usano anch'essi spazio di contesto.";
 "error.generic" = "Errore: %@";
 "personal.button_saving" = "Salvataggio...";
 "personal.button_setup_wizard" = "Assistente di Configurazione";
@@ -640,6 +667,12 @@
 "section.general_desc" = "Impostazioni generali";
 "section.manage_profiles_title" = "Gestisci Profili";
 "section.manage_profiles_desc" = "Gestisci profili";
+"section.history_title" = "Cronologia";
+"section.history_desc" = "Visualizza cronologia utilizzo";
+"section.support_title" = "Supporto";
+"section.support_desc" = "Supporta lo sviluppo del progetto";
+"section.debug_title" = "Strumenti di Debug";
+"section.debug_desc" = "Registrazione di rete e diagnostica";
 
 /* ==================== */
 /* MARK: - Creator Info */
@@ -684,6 +717,7 @@
 "api.remove_subtitle" = "Elimina permanentemente la tua chiave di sessione API Console da questo profilo";
 "claudecode.button_apply" = "Applica";
 "claudecode.button_reset" = "Ripristina";
+"claudecode.actions_title" = "Azioni";
 "error.generic" = "Errore: %@";
 "personal.button_saving" = "Salvataggio...";
 "personal.button_setup_wizard" = "Procedura Guidata";
@@ -691,6 +725,10 @@
 "personal.success_key_saved" = "Chiave di sessione salvata con successo";
 "personal.remove_title" = "Rimuovi Credenziali";
 "personal.remove_subtitle" = "Elimina permanentemente la tua chiave di sessione Claude.ai da questo profilo";
+"personal.signin_description" = "Accedi per estrarre automaticamente la tua chiave di sessione.";
+"personal.signin_button" = "Accedi a Claude.ai";
+"personal.signin_sheet_title" = "Accedi a Claude.ai";
+"personal.advanced_manual_key" = "Avanzato: Chiave di sessione manuale";
 "about.run_setup_wizard" = "Esegui Procedura Guidata";
 
 /* Migration & Reset */
@@ -722,3 +760,199 @@
 "dashboard.compactions_auto" = "Auto";
 "dashboard.compactions_manual" = "Manuale";
 "sessions.compaction_tooltip" = "%d automatiche, %d manuali";
+
+// History
+"history.title" = "Cronologia Utilizzo";
+"history.subtitle" = "Traccia il tuo utilizzo nel tempo";
+"history.tab.session" = "Sessioni";
+"history.tab.weekly" = "Settimanale";
+"history.tab.billing" = "Fatturazione";
+"history.chart.session_title" = "Cronologia Utilizzo Sessione";
+"history.chart.weekly_title" = "Tendenza Utilizzo Settimanale";
+"history.chart.billing_title" = "Spesa API Mensile";
+"history.chart.now" = "Ora";
+"history.empty.session_title" = "Nessuna Cronologia Sessione";
+"history.empty.session_description" = "L'utilizzo della sessione verrà registrato dopo ogni reset di 5 ore";
+"history.empty.weekly_title" = "Nessuna Cronologia Settimanale";
+"history.empty.weekly_description" = "L'utilizzo settimanale verrà registrato dopo ogni reset del lunedì";
+"history.empty.billing_title" = "Nessuna Cronologia Fatturazione";
+"history.empty.billing_description" = "I dati di fatturazione verranno registrati dopo ogni reset mensile";
+"history.list.title" = "Registri Cronologia";
+"history.list.count" = "%d registri";
+"history.list.empty" = "Nessun registro ancora. La cronologia verrà registrata automaticamente ad ogni reset.";
+"history.list.more" = "+%d registri in più";
+"history.export_button" = "Esporta";
+"history.clear_button" = "Cancella";
+"history.no_profile" = "Nessun profilo attivo";
+"history.reset_type.session" = "Reset Sessione";
+"history.reset_type.weekly" = "Reset Settimanale";
+"history.reset_type.billing" = "Ciclo di Fatturazione";
+"history.label.total" = "Totale";
+"history.label.spent" = "Speso";
+"history.label.session" = "Sessione";
+"history.time_scale.5_hours" = "5 Ore";
+"history.time_scale.24_hours" = "24 Ore";
+"history.time_scale.7_days" = "7 Giorni";
+"history.time_scale.30_days" = "30 Giorni";
+"history.chart.session_usage" = "Utilizzo Sessione";
+"history.chart.weekly_usage" = "Utilizzo Settimanale";
+"history.chart.api_billing" = "Fatturazione API";
+"history.chart.no_data" = "Nessun dato nell'intervallo selezionato";
+"history.export.title" = "Esporta Dati";
+"history.export.json" = "Esporta come JSON";
+"history.export.csv" = "Esporta come CSV";
+"history.chart.now" = "Ora";
+"support.title" = "Supporta il Progetto";
+"support.subtitle" = "Claude Usage Tracker è gratuito e open source";
+"support.all_features_free" = "Tutte le Funzionalità Sono Gratuite";
+"support.all_features_desc" = "Ogni funzionalità in questa app è completamente gratuita. Nessun livello premium, nessun paywall, nessun abbonamento.";
+"support.open_source" = "Open Source";
+"support.open_source_desc" = "Il codice sorgente è disponibile pubblicamente su GitHub. Puoi ispezionarlo, modificarlo e contribuire al progetto.";
+"support.no_tracking" = "Nessun Tracciamento";
+"support.no_tracking_desc" = "La tua privacy conta. Nessuna analisi, nessuna telemetria, nessuna raccolta di dati. Tutto rimane sul tuo Mac.";
+"support.message" = "Se trovi questa app utile, considera di supportarne lo sviluppo";
+"support.buy_coffee" = "Offrimi un Caffè";
+"support.footer" = "Il tuo supporto aiuta a mantenere questo progetto vivo e in crescita";
+"support.also_support" = "Puoi anche supportare";
+"support.star_github" = "Mettendo una Stella su GitHub";
+"debug.title" = "Strumenti di Debug";
+"debug.subtitle" = "Registra le richieste di rete per la risoluzione dei problemi e la diagnostica";
+"debug.network_logger" = "Logger Richieste di Rete";
+"debug.network_logger_desc" = "Cattura tutte le richieste API con informazioni dettagliate";
+"debug.logging_duration" = "Durata Registrazione";
+"debug.logging_active" = "Registrazione Attiva";
+"debug.logging_inactive" = "Registrazione Inattiva";
+"debug.stops_in" = "Si ferma tra %@";
+"debug.start_logging" = "Inizia Registrazione";
+"debug.stop_logging" = "Ferma Registrazione";
+"debug.clear_logs" = "Cancella Log";
+"debug.clear_all_logs" = "Cancellare Tutti i Log?";
+"debug.clear_logs_message" = "Questo eliminerà definitivamente tutte le richieste di rete registrate.";
+"debug.captured_requests" = "Richieste Catturate";
+"debug.requests_logged" = "%d richieste registrate";
+"debug.no_requests" = "Nessuna richiesta registrata ancora";
+"debug.request_details" = "Dettagli Richiesta";
+"debug.basic_information" = "Informazioni di Base";
+"debug.request_body" = "Corpo Richiesta";
+"debug.response_preview" = "Anteprima Risposta";
+"debug.full_size" = "Dimensione completa: %@";
+"debug.error" = "Errore";
+"debug.url" = "URL";
+"debug.method" = "Metodo";
+"debug.status_code" = "Codice di Stato";
+"debug.duration" = "Durata";
+"debug.timestamp" = "Timestamp";
+"debug.duration_seconds" = "%.3f secondi";
+
+/* ==================== */
+/* MARK: - Combined Usage Chart */
+/* ==================== */
+"history.chart.usage_overview" = "Panoramica utilizzo";
+
+/* ==================== */
+/* MARK: - Keyboard Shortcuts */
+/* ==================== */
+"section.shortcuts_title" = "Scorciatoie";
+"section.shortcuts_desc" = "Configura le scorciatoie da tastiera";
+"shortcuts.title" = "Scorciatoie da Tastiera";
+"shortcuts.subtitle" = "Imposta tasti rapidi globali per le azioni comuni";
+"shortcuts.open_popover" = "Mostra/Nascondi pannello";
+"shortcuts.open_popover_desc" = "Mostra o nascondi il pannello di utilizzo";
+"shortcuts.refresh" = "Aggiorna utilizzo";
+"shortcuts.refresh_desc" = "Recupera i dati di utilizzo più recenti";
+"shortcuts.open_settings" = "Apri impostazioni";
+"shortcuts.open_settings_desc" = "Apri la finestra delle impostazioni";
+"shortcuts.next_profile" = "Profilo successivo";
+"shortcuts.next_profile_desc" = "Passa al profilo successivo";
+"shortcuts.record" = "Clicca per registrare";
+"shortcuts.recording" = "Premi una scorciatoia...";
+"shortcuts.clear" = "Cancella";
+"shortcuts.none" = "Nessuna";
+"shortcuts.info_title" = "Scorciatoie globali";
+"shortcuts.info_desc" = "Le scorciatoie funzionano da qualsiasi applicazione. Ogni scorciatoia deve includere almeno un tasto modificatore (Comando, Opzione, Controllo o Maiuscolo). Evita conflitti con le scorciatoie di sistema.";
+
+/* ==================== */
+/* MARK: - Mobile App (Coming Soon) */
+/* ==================== */
+"section.mobile_app_title" = "App Mobile";
+"section.mobile_app_desc" = "App mobile in arrivo";
+"mobile.title" = "App Mobile";
+"mobile.subtitle" = "Monitora il tuo utilizzo di Claude ovunque";
+"mobile.coming_soon_badge" = "IN ARRIVO";
+"mobile.cta_message" = "Interessato? Faccelo sapere e ti avviseremo quando sarà pronto.";
+"mobile.notify_me" = "Avvisami";
+"mobile.submitting" = "Invio...";
+"mobile.notified" = "Sei nella lista!";
+"mobile.notified_desc" = "Ti informeremo quando l'app mobile sarà disponibile.";
+"mobile.privacy_note" = "Nessun dato personale viene raccolto. Questo registra solo il tuo interesse.";
+"mobile.error_title" = "Richiesta fallita";
+"mobile.error_message" = "Impossibile registrare il tuo interesse. Controlla la connessione internet e riprova.";
+
+/* ==================== */
+/* MARK: - Popover Settings */
+/* ==================== */
+"section.popover_title" = "Popover";
+"section.popover_desc" = "Personalizza la visualizzazione del popover";
+"section.app_settings_title" = "Impostazioni";
+"section.app_settings_desc" = "Impostazioni dell'app e avvio";
+"popover.title" = "Popover";
+"popover.subtitle" = "Personalizza come il popover mostra le informazioni di utilizzo";
+"popover.display_section" = "Visualizzazione";
+"popover.time_display" = "Visualizzazione tempo";
+"popover.time_display_desc" = "Scegli cosa mostrare per i tempi di ripristino";
+"popover.time_display_reset" = "Orario";
+"popover.time_display_remaining" = "Rimanente";
+"popover.time_display_both" = "Entrambi";
+"popover.time_format" = "Formato ora";
+"popover.time_format_desc" = "Scegli come vengono visualizzati gli orari nell'app";
+"popover.time_format_system" = "Sistema";
+"popover.time_format_12h" = "12 ore";
+"popover.time_format_24h" = "24 ore";
+
+/* ==================== */
+/* MARK: - Feedback Prompt */
+/* ==================== */
+"feedback.title" = "Aiutaci a Migliorare";
+"feedback.subtitle" = "Il tuo feedback plasma il futuro di questa app";
+"feedback.name_placeholder" = "Nome";
+"feedback.title_label" = "Ruolo";
+"feedback.contact_placeholder" = "Email";
+"feedback.message_placeholder" = "Dicci tutto — feedback, idee, suggerimenti...";
+"feedback.submit" = "Invia";
+"feedback.submitting" = "Invio...";
+"feedback.remind_later" = "Ricordamelo Dopo";
+"feedback.never_show" = "Non Chiedere Più";
+"feedback.thanks" = "Grazie per il tuo feedback!";
+"feedback.error_title" = "Invio Fallito";
+"feedback.error_message" = "Impossibile inviare il feedback. Riprova più tardi.";
+"feedback.role_developer" = "Sviluppatore";
+"feedback.role_designer" = "Designer";
+"feedback.role_manager" = "Manager";
+"feedback.role_student" = "Studente";
+"feedback.role_researcher" = "Ricercatore";
+"feedback.role_other" = "Altro";
+
+// MARK: - Status Banners
+"popover.banner.credentials_expired" = "Credenziali scadute. Aggiorna in Impostazioni.";
+"popover.banner.refresh_failed" = "Aggiornamento fallito %d volte";
+"popover.banner.updated_ago" = "Aggiornato %dm fa";
+
+// MARK: - Overage Balance
+"popover.overage_balance" = "Saldo";
+
+// MARK: - Setup Wizard CLI Detection
+"setup.cli_detecting" = "Ricerca credenziali CLI...";
+"setup.cli_detected.title" = "CLI Rilevato!";
+"setup.cli_detected.description" = "Credenziali Claude Code CLI trovate nel sistema. Inizia il monitoraggio con un clic.";
+"setup.cli_detected.start" = "Inizia Monitoraggio";
+"setup.cli_detected.manual" = "Configura Manualmente";
+
+// MARK: - Custom Notification Settings
+"notifications.custom_thresholds" = "Soglie Personalizzate";
+"notifications.custom_threshold" = "Avviso personalizzato";
+"notifications.custom_placeholder" = "es. 50";
+"notifications.custom_add" = "Aggiungi";
+"notifications.sound" = "Suono";
+"notifications.sound.default" = "Predefinito";
+"notifications.sound.none" = "Nessuno";
+"notifications.sound.preview" = "Anteprima suono";

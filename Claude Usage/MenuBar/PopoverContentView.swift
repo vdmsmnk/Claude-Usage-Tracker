@@ -1,6 +1,59 @@
 import SwiftUI
+import Charts
 
-/// Smart, minimal, and professional popover interface
+// MARK: - Always-active vibrancy background
+struct VisualEffectBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let container = NSView()
+
+        // Base vibrancy layer
+        let effectView = NSVisualEffectView()
+        effectView.material = .hudWindow
+        effectView.blendingMode = .behindWindow
+        effectView.state = .active
+        effectView.isEmphasized = true
+        effectView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(effectView)
+
+        // Solid tint overlay for more density
+        let tintView = NSView()
+        tintView.wantsLayer = true
+        if NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+            tintView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.25).cgColor
+        } else {
+            tintView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.4).cgColor
+        }
+        tintView.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(tintView)
+
+        NSLayoutConstraint.activate([
+            effectView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            effectView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            effectView.topAnchor.constraint(equalTo: container.topAnchor),
+            effectView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            tintView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            tintView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            tintView.topAnchor.constraint(equalTo: container.topAnchor),
+            tintView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+
+        return container
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        // Update tint for appearance changes
+        if let tintView = nsView.subviews.last {
+            tintView.wantsLayer = true
+            if NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua {
+                tintView.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.25).cgColor
+            } else {
+                tintView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.4).cgColor
+            }
+        }
+    }
+}
+
+/// Native macOS popover interface - minimal, flat, system-style
 struct PopoverContentView: View {
     @ObservedObject var manager: MenuBarManager
     let onRefresh: () -> Void
@@ -12,19 +65,33 @@ struct PopoverContentView: View {
     @State private var showInsights = false
     @ObservedObject private var profileManager = ProfileManager.shared
 
+    private func profileInitials(for name: String) -> String {
+        let words = name.split(separator: " ")
+        if words.count >= 2 {
+            return String(words[0].prefix(1) + words[1].prefix(1)).uppercased()
+        } else if let first = words.first {
+            return String(first.prefix(2)).uppercased()
+        }
+        return "?"
+    }
+
     // Computed properties for multi-profile mode support
     private var displayUsage: ClaudeUsage {
-        // In multi-profile mode, use the clicked profile's usage
         manager.clickedProfileUsage ?? manager.usage
     }
 
     private var displayAPIUsage: APIUsage? {
-        manager.clickedProfileAPIUsage ?? manager.apiUsage
+        // When viewing a non-active profile, use only that profile's API data
+        // to avoid leaking the active profile's console data
+        if manager.clickedProfileUsage != nil {
+            return manager.clickedProfileAPIUsage
+        }
+        return manager.apiUsage
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Smart Header with Status and Profile Switcher
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
             SmartHeader(
                 usage: displayUsage,
                 status: manager.status,
@@ -41,8 +108,86 @@ struct PopoverContentView: View {
                     }
                 },
                 onManageProfiles: onPreferences,
+                onPreferences: onPreferences,
                 clickedProfileId: manager.clickedProfileId
             )
+
+            PopoverDivider()
+
+            // Error / stale data banners
+            if manager.hasCredentialError {
+                StatusBannerView(
+                    icon: "exclamationmark.triangle.fill",
+                    message: "popover.banner.credentials_expired".localized,
+                    color: .orange
+                ) {
+                    onPreferences()
+                }
+            } else if manager.consecutiveRefreshFailures >= 3 {
+                StatusBannerView(
+                    icon: "arrow.clockwise.circle.fill",
+                    message: String(format: "popover.banner.refresh_failed".localized, manager.consecutiveRefreshFailures),
+                    color: .yellow
+                ) {
+                    onRefresh()
+                }
+            } else if let lastRefresh = manager.lastSuccessfulRefreshTime,
+                      Date().timeIntervalSince(lastRefresh) > 300 {
+                let minutesAgo = Int(Date().timeIntervalSince(lastRefresh) / 60)
+                StatusBannerView(
+                    icon: "clock.fill",
+                    message: String(format: "popover.banner.updated_ago".localized, minutesAgo),
+                    color: .orange
+                ) {
+                    onRefresh()
+                }
+            }
+
+            // Viewing usage tag (shown in multi-profile mode)
+            if profileManager.displayMode == .multi,
+               let viewingProfile = manager.clickedProfileId.flatMap({ id in
+                   profileManager.profiles.first(where: { $0.id == id })
+               }) ?? profileManager.activeProfile {
+                HStack(spacing: 8) {
+                    // Profile initials avatar
+                    ZStack {
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.15))
+                            .frame(width: 20, height: 20)
+
+                        Text(profileInitials(for: viewingProfile.name))
+                            .font(.system(size: 8, weight: .bold, design: .rounded))
+                            .foregroundColor(.accentColor)
+                    }
+
+                    Text(viewingProfile.name)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    if viewingProfile.id == profileManager.activeProfile?.id {
+                        Text("Active")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundColor(.accentColor)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule()
+                                    .fill(Color.accentColor.opacity(0.12))
+                            )
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.primary.opacity(0.03))
+                )
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+            }
 
             // Scrollable content area
             ScrollView(.vertical, showsIndicators: true) {
@@ -75,7 +220,16 @@ struct PopoverContentView: View {
             )
         }
         .frame(width: 380)
-        .background(.regularMaterial)
+        .background(VisualEffectBackground())
+    }
+}
+
+// MARK: - Native Divider
+
+struct PopoverDivider: View {
+    var body: some View {
+        Divider()
+            .padding(.horizontal, 16)
     }
 }
 
@@ -95,36 +249,30 @@ struct ProfileSwitcherCompact: View {
                     }
                 }) {
                     HStack(spacing: 8) {
-                        // Profile icon
                         Image(systemName: "person.circle.fill")
                             .font(.system(size: 12))
 
-                        // Profile name
                         Text(profile.name)
                             .font(.system(size: 12, weight: .medium))
 
                         Spacer()
 
-                        // Badges
                         HStack(spacing: 4) {
-                            // CLI Account badge
                             if profile.hasCliAccount {
                                 Image(systemName: "terminal.fill")
                                     .font(.system(size: 9))
-                                    .foregroundColor(.green)
+                                    .foregroundColor(.adaptiveGreen)
                             }
 
-                            // Claude.ai badge
                             if profile.claudeSessionKey != nil {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 9))
                                     .foregroundColor(.blue)
                             }
 
-                            // Active indicator
                             if profile.id == profileManager.activeProfile?.id {
-                                Image(systemName: "circle.fill")
-                                    .font(.system(size: 6))
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .semibold))
                                     .foregroundColor(.accentColor)
                             }
                         }
@@ -143,42 +291,13 @@ struct ProfileSwitcherCompact: View {
                 }
             }
         } label: {
-            HStack(spacing: 5) {
-                Text(profileManager.activeProfile?.name ?? "popover.no_profile".localized)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-
-                // Status badges
-                if profileManager.activeProfile?.hasCliAccount == true || profileManager.activeProfile?.claudeSessionKey != nil {
-                    HStack(spacing: 3) {
-                        if profileManager.activeProfile?.hasCliAccount == true {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 5, height: 5)
-                        }
-                        if profileManager.activeProfile?.claudeSessionKey != nil {
-                            Circle()
-                                .fill(Color.blue)
-                                .frame(width: 5, height: 5)
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(
-                Capsule()
-                    .fill(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
-            )
+            Text(profileManager.activeProfile?.name ?? "popover.no_profile".localized)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
         }
         .menuStyle(.borderlessButton)
         .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.15)) {
-                isHovered = hovering
-            }
-        }
     }
 }
 
@@ -198,36 +317,30 @@ struct ProfileSwitcherBar: View {
                     }
                 }) {
                     HStack(spacing: 8) {
-                        // Profile icon
                         Image(systemName: "person.circle.fill")
                             .font(.system(size: 12))
 
-                        // Profile name
                         Text(profile.name)
                             .font(.system(size: 12, weight: .medium))
 
                         Spacer()
 
-                        // Badges
                         HStack(spacing: 4) {
-                            // CLI Account badge
                             if profile.hasCliAccount {
                                 Image(systemName: "terminal.fill")
                                     .font(.system(size: 9))
-                                    .foregroundColor(.green)
+                                    .foregroundColor(.adaptiveGreen)
                             }
 
-                            // Claude.ai badge
                             if profile.claudeSessionKey != nil {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 9))
                                     .foregroundColor(.blue)
                             }
 
-                            // Active indicator
                             if profile.id == profileManager.activeProfile?.id {
-                                Image(systemName: "circle.fill")
-                                    .font(.system(size: 6))
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .semibold))
                                     .foregroundColor(.accentColor)
                             }
                         }
@@ -246,46 +359,23 @@ struct ProfileSwitcherBar: View {
                 }
             }
         } label: {
-            HStack(spacing: 10) {
-                // Profile avatar with gradient background
+            HStack(spacing: 8) {
+                // Profile avatar
                 ZStack {
                     Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.accentColor.opacity(0.8), Color.accentColor],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 32, height: 32)
+                        .fill(Color.accentColor)
+                        .frame(width: 28, height: 28)
 
                     Text(profileInitials)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundColor(.white)
                 }
 
-                // Profile info
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(profileManager.activeProfile?.name ?? "popover.no_profile".localized)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.primary)
-                            .lineLimit(1)
-
-                        // Status badges
-                        HStack(spacing: 3) {
-                            if profileManager.activeProfile?.hasCliAccount == true {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 5, height: 5)
-                            }
-                            if profileManager.activeProfile?.claudeSessionKey != nil {
-                                Circle()
-                                    .fill(Color.blue)
-                                    .frame(width: 5, height: 5)
-                            }
-                        }
-                    }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(profileManager.activeProfile?.name ?? "popover.no_profile".localized)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
 
                     HStack(spacing: 4) {
                         if profileManager.profiles.count > 1 {
@@ -299,7 +389,7 @@ struct ProfileSwitcherBar: View {
                         }
 
                         Text("•")
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 9))
                             .foregroundColor(.secondary.opacity(0.5))
 
                         Text("common.switch".localized)
@@ -310,36 +400,20 @@ struct ProfileSwitcherBar: View {
 
                 Spacer()
 
-                // Chevron indicator
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(.secondary.opacity(0.6))
-                    .rotationEffect(.degrees(isHovered ? 180 : 0))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(8)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(
-                        isHovered
-                        ? Color.accentColor.opacity(0.08)
-                        : Color(nsColor: .controlBackgroundColor).opacity(0.5)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(
-                                isHovered
-                                ? Color.accentColor.opacity(0.3)
-                                : Color.secondary.opacity(0.1),
-                                lineWidth: 1
-                            )
-                    )
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isHovered ? Color.primary.opacity(0.05) : Color.clear)
             )
         }
         .menuStyle(.borderlessButton)
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
         }
@@ -364,13 +438,14 @@ struct SmartHeader: View {
     let isRefreshing: Bool
     let onRefresh: () -> Void
     let onManageProfiles: () -> Void
-    var clickedProfileId: UUID? = nil  // Profile ID that was clicked in multi-profile mode
+    let onPreferences: () -> Void
+    var clickedProfileId: UUID? = nil
 
     @ObservedObject private var profileManager = ProfileManager.shared
 
     private var statusColor: Color {
         switch status.indicator.color {
-        case .green: return .green
+        case .green: return .adaptiveGreen
         case .yellow: return .yellow
         case .orange: return .orange
         case .red: return .red
@@ -378,18 +453,15 @@ struct SmartHeader: View {
         }
     }
 
-    /// Check if we're in multi-profile mode
     private var isMultiProfileMode: Bool {
         profileManager.displayMode == .multi
     }
 
-    /// Get the clicked profile (for multi-profile mode)
     private var clickedProfile: Profile? {
         guard let id = clickedProfileId else { return nil }
         return profileManager.profiles.first { $0.id == id }
     }
 
-    /// Get initials from profile name
     private func profileInitials(for name: String) -> String {
         let words = name.split(separator: " ")
         if words.count >= 2 {
@@ -401,93 +473,90 @@ struct SmartHeader: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            // App Logo or Profile Initial
-            HStack(spacing: 8) {
-                if isMultiProfileMode, let profile = clickedProfile {
-                    // Show profile initial in multi-profile mode - clean, minimal style
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(nsColor: .controlBackgroundColor))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1)
-                            )
-                            .frame(width: 24, height: 24)
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                ProfileSwitcherCompact(onManageProfiles: onManageProfiles)
 
-                        Text(profileInitials(for: profile.name))
-                            .font(.system(size: 10, weight: .semibold, design: .rounded))
+                // Status
+                Button(action: {
+                    if let url = URL(string: "https://status.claude.com") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 6, height: 6)
+
+                        Text(status.description)
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundColor(.secondary)
                     }
-                } else {
-                    // Show app logo in single-profile mode
-                    Image("HeaderLogo")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 24, height: 24)
                 }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    // Profile Switcher (always shown)
-                    ProfileSwitcherCompact(onManageProfiles: onManageProfiles)
-
-                    // Claude Status Badge
-                    Button(action: {
-                        if let url = URL(string: "https://status.claude.com") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(statusColor)
-                                .frame(width: 6, height: 6)
-
-                            Text(status.description)
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundColor(.primary.opacity(0.8))
-                        }
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(statusColor.opacity(0.12))
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .help("Click to open status.claude.com")
-                }
+                .buttonStyle(.plain)
+                .help("Click to open status.claude.com")
             }
 
             Spacer()
 
-            // Smart Refresh Button
-            Button(action: onRefresh) {
-                ZStack {
-                    if isRefreshing {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(width: 14, height: 14)
-                    } else {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 11, weight: .medium))
-                    }
-                }
-                .foregroundColor(.secondary)
-                .frame(width: 24, height: 20)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.secondary.opacity(0.1))
+            HStack(alignment: .center, spacing: 2) {
+                // Refresh
+                HeaderIconButton(
+                    icon: "arrow.clockwise",
+                    isRefreshing: isRefreshing,
+                    action: onRefresh
+                )
+                .disabled(isRefreshing)
+
+                // Settings
+                HeaderIconButton(
+                    icon: "gearshape.fill",
+                    fontSize: 12,
+                    action: onPreferences
                 )
             }
-            .buttonStyle(.plain)
-            .disabled(isRefreshing)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
-        )
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+    }
+}
+
+// MARK: - Header Icon Button
+struct HeaderIconButton: View {
+    let icon: String
+    var fontSize: CGFloat = 10.5
+    var isRefreshing: Bool = false
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                if isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 10, height: 10)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: fontSize, weight: .medium))
+                        .imageScale(.medium)
+                }
+            }
+            .foregroundColor(isHovered ? .primary : .secondary)
+            .frame(width: 24, height: 24, alignment: .center)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(isHovered ? Color.primary.opacity(0.08) : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
     }
 }
 
@@ -497,97 +566,145 @@ struct SmartUsageDashboard: View {
     let apiUsage: APIUsage?
     @ObservedObject private var profileManager = ProfileManager.shared
 
-    // Get the display mode from active profile's icon config
     private var showRemainingPercentage: Bool {
         profileManager.activeProfile?.iconConfig.showRemainingPercentage ?? false
     }
 
-    // Check if API tracking is enabled globally
-    private var isAPITrackingEnabled: Bool {
-        DataStore.shared.loadAPITrackingEnabled()
+    private var showTimeMarker: Bool {
+        if profileManager.displayMode == .multi {
+            return profileManager.multiProfileConfig.showTimeMarker
+        }
+        return profileManager.activeProfile?.iconConfig.showTimeMarker ?? true
+    }
+
+    private var usePaceColoring: Bool {
+        if profileManager.displayMode == .multi {
+            return profileManager.multiProfileConfig.usePaceColoring
+        }
+        return profileManager.activeProfile?.iconConfig.usePaceColoring ?? true
+    }
+
+    private var showPaceMarker: Bool {
+        if profileManager.displayMode == .multi {
+            return profileManager.multiProfileConfig.showPaceMarker
+        }
+        return profileManager.activeProfile?.iconConfig.showPaceMarker ?? true
+    }
+
+    private var timeDisplay: PopoverTimeDisplay {
+        SharedDataStore.shared.loadPopoverTimeDisplay()
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            // Primary Usage Card
-            SmartUsageCard(
+        VStack(alignment: .leading, spacing: 6) {
+            // Primary: Session Usage
+            UsageRow(
                 title: "menubar.session_usage".localized,
                 subtitle: "menubar.5_hour_window".localized,
-                usedPercentage: usage.sessionPercentage,
+                usedPercentage: usage.effectiveSessionPercentage,
                 showRemaining: showRemainingPercentage,
                 resetTime: usage.sessionResetTime,
-                isPrimary: true
+                periodDuration: Constants.sessionWindow,
+                showTimeMarker: showTimeMarker,
+                showPaceMarker: showPaceMarker,
+                usePaceColoring: usePaceColoring,
+                timeDisplay: timeDisplay
             )
 
-            // Secondary Usage Cards
-            HStack(spacing: 12) {
-                SmartUsageCard(
-                    title: "menubar.all_models".localized,
-                    subtitle: "menubar.weekly".localized,
-                    usedPercentage: usage.weeklyPercentage,
+            // All Models (Weekly)
+            UsageRow(
+                title: "menubar.all_models".localized,
+                tag: "menubar.weekly".localized,
+                subtitle: nil,
+                usedPercentage: usage.weeklyPercentage,
+                showRemaining: showRemainingPercentage,
+                resetTime: usage.weeklyResetTime,
+                periodDuration: Constants.weeklyWindow,
+                showTimeMarker: showTimeMarker,
+                showPaceMarker: showPaceMarker,
+                usePaceColoring: usePaceColoring,
+                timeDisplay: timeDisplay
+            )
+
+            if usage.opusWeeklyTokensUsed > 0 {
+                UsageRow(
+                    title: "menubar.opus_usage".localized,
+                    tag: "menubar.weekly".localized,
+                    subtitle: nil,
+                    usedPercentage: usage.opusWeeklyPercentage,
                     showRemaining: showRemainingPercentage,
-                    resetTime: usage.weeklyResetTime,
-                    isPrimary: false
+                    resetTime: nil,
+                    periodDuration: nil
                 )
-
-                if usage.opusWeeklyTokensUsed > 0 {
-                    SmartUsageCard(
-                        title: "menubar.opus_usage".localized,
-                        subtitle: "menubar.weekly".localized,
-                        usedPercentage: usage.opusWeeklyPercentage,
-                        showRemaining: showRemainingPercentage,
-                        resetTime: nil,
-                        isPrimary: false
-                    )
-                }
-
-                if usage.sonnetWeeklyTokensUsed > 0 {
-                    SmartUsageCard(
-                        title: "menubar.sonnet_usage".localized,
-                        subtitle: "menubar.weekly".localized,
-                        usedPercentage: usage.sonnetWeeklyPercentage,
-                        showRemaining: showRemainingPercentage,
-                        resetTime: usage.sonnetWeeklyResetTime,
-                        isPrimary: false
-                    )
-                }
             }
 
+            if usage.sonnetWeeklyTokensUsed > 0 {
+                UsageRow(
+                    title: "menubar.sonnet_usage".localized,
+                    subtitle: nil,
+                    usedPercentage: usage.sonnetWeeklyPercentage,
+                    showRemaining: showRemainingPercentage,
+                    resetTime: usage.sonnetWeeklyResetTime,
+                    periodDuration: nil,
+                    timeDisplay: timeDisplay
+                )
+            }
+
+            // Extra usage (cost-based)
             if let used = usage.costUsed, let limit = usage.costLimit, let currency = usage.costCurrency, limit > 0 {
                 let usedPercentage = (used / limit) * 100.0
-                SmartUsageCard(
+                UsageRow(
                     title: "menubar.extra_usage".localized,
                     subtitle: String(format: "%.2f / %.2f %@", used / 100.0, limit / 100.0, currency),
                     usedPercentage: usedPercentage,
                     showRemaining: showRemainingPercentage,
                     resetTime: nil,
-                    isPrimary: false
+                    periodDuration: nil
                 )
+
+                // Overage credit grant balance
+                if let balance = usage.overageBalance, let balanceCurrency = usage.overageBalanceCurrency {
+                    HStack {
+                        Text("popover.overage_balance".localized)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(String(format: "%.2f %@", balance / 100.0, balanceCurrency.uppercased()))
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundColor(.adaptiveGreen)
+                    }
+                }
             }
 
-            // API Usage Card (only if tracking is enabled AND profile has credentials)
-            if isAPITrackingEnabled,
-               let apiUsage = apiUsage,
-               let profile = profileManager.activeProfile,
-               profile.hasAPIConsole {
-                APIUsageCard(apiUsage: apiUsage, showRemaining: showRemainingPercentage)
+            // API Usage
+            if let apiUsage = apiUsage {
+                APIUsageCard(apiUsage: apiUsage, showRemaining: showRemainingPercentage, timeDisplay: timeDisplay)
+
+                // API Cost Card (only if cost data is available)
+                if let costCents = apiUsage.apiTokenCostCents, costCents > 0 {
+                    APICostCard(apiUsage: apiUsage)
+                }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 }
 
-// MARK: - Smart Usage Card
-struct SmartUsageCard: View {
+// MARK: - Usage Row (flat, native style)
+struct UsageRow: View {
     let title: String
-    let subtitle: String
+    var tag: String? = nil
+    let subtitle: String?
     let usedPercentage: Double
     let showRemaining: Bool
     let resetTime: Date?
-    let isPrimary: Bool
+    let periodDuration: TimeInterval?
+    var showTimeMarker: Bool = true
+    var showPaceMarker: Bool = true
+    var usePaceColoring: Bool = true
+    var timeDisplay: PopoverTimeDisplay = .resetTime
 
-    /// Display percentage based on mode
     private var displayPercentage: Double {
         UsageStatusCalculator.getDisplayPercentage(
             usedPercentage: usedPercentage,
@@ -595,98 +712,130 @@ struct SmartUsageCard: View {
         )
     }
 
-    /// Status level based on display mode
-    private var statusLevel: UsageStatusLevel {
-        UsageStatusCalculator.calculateStatus(
-            usedPercentage: usedPercentage,
-            showRemaining: showRemaining
+    private var rawElapsedFraction: Double? {
+        UsageStatusCalculator.elapsedFraction(
+            resetTime: resetTime,
+            duration: periodDuration ?? 0,
+            showRemaining: false
         )
     }
 
-    /// Color based on status level
+    private var timeMarkerFraction: CGFloat? {
+        guard showTimeMarker, let f = rawElapsedFraction else { return nil }
+        return CGFloat(showRemaining ? 1.0 - f : f)
+    }
+
+    private var paceStatus: PaceStatus? {
+        guard showPaceMarker, let elapsed = rawElapsedFraction else { return nil }
+        return PaceStatus.calculate(usedPercentage: usedPercentage, elapsedFraction: elapsed)
+    }
+
+    private var timeMarkerColor: Color {
+        if let pace = paceStatus {
+            return pace.swiftUIColor
+        }
+        return Color(nsColor: .labelColor)
+    }
+
+    private var statusLevel: UsageStatusLevel {
+        UsageStatusCalculator.calculateStatus(
+            usedPercentage: usedPercentage,
+            showRemaining: showRemaining,
+            elapsedFraction: usePaceColoring ? rawElapsedFraction : nil
+        )
+    }
+
     private var statusColor: Color {
         switch statusLevel {
-        case .safe: return .green
+        case .safe: return .adaptiveGreen
         case .moderate: return .orange
         case .critical: return .red
         }
     }
 
-    private var statusIcon: String {
-        switch statusLevel {
-        case .safe: return "checkmark.circle.fill"
-        case .moderate: return "exclamationmark.triangle.fill"
-        case .critical: return "xmark.circle.fill"
-        }
-    }
-
     var body: some View {
-        VStack(spacing: isPrimary ? 12 : 8) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.system(size: isPrimary ? 13 : 11, weight: .semibold))
-                        .foregroundColor(.primary)
+        VStack(alignment: .leading, spacing: 5) {
+            // Title row with percentage
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 5) {
+                        Text(title)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.primary)
 
-                    Text(subtitle)
-                        .font(.system(size: isPrimary ? 10 : 9, weight: .medium))
-                        .foregroundColor(.secondary)
+                        if let tag = tag {
+                            Text(tag)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 1)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.primary.opacity(0.08))
+                                )
+                        }
+                    }
+
+                    if let subtitle = subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
 
-                // Status indicator
-                HStack(spacing: 4) {
-                    Image(systemName: statusIcon)
-                        .font(.system(size: isPrimary ? 12 : 10, weight: .medium))
-                        .foregroundColor(statusColor)
-
-                    Text("\(Int(displayPercentage))%")
-                        .font(.system(size: isPrimary ? 16 : 14, weight: .bold, design: .monospaced))
-                        .foregroundColor(statusColor)
-                }
+                Text("\(Int(displayPercentage))%")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundColor(statusColor)
             }
 
-            // Progress visualization
-            VStack(spacing: 6) {
-                // Animated progress bar
-                GeometryReader { geometry in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(Color.secondary.opacity(0.15))
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(Color.primary.opacity(0.08))
 
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(
-                                LinearGradient(
-                                    colors: [statusColor, statusColor.opacity(0.8)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: geometry.size.width * min(displayPercentage / 100.0, 1.0))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
-                            .animation(.easeInOut(duration: 0.8), value: displayPercentage)
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(statusColor)
+                        .frame(width: geometry.size.width * min(displayPercentage / 100.0, 1.0))
+                        .animation(.easeInOut(duration: 0.6), value: displayPercentage)
+                }
+                .overlay(alignment: .leading) {
+                    if let fraction = timeMarkerFraction {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(timeMarkerColor)
+                            .frame(width: 2.5, height: 8)
+                            .offset(x: round(geometry.size.width * fraction) - 0.75)
                     }
                 }
-                .frame(height: 8)
+            }
+            .frame(height: 4)
 
-                // Reset time information
-                if let reset = resetTime {
-                    HStack {
-                        Spacer()
-                        Text("menubar.resets_time".localized(with: reset.resetTimeString()))
-                            .font(.system(size: isPrimary ? 9 : 8, weight: .medium))
-                            .foregroundColor(.secondary)
-                    }
-                }
+            // Reset time
+            if let reset = resetTime {
+                Text(resetTimeText(for: reset))
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
             }
         }
-        .padding(isPrimary ? 16 : 12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
         )
+    }
+
+    private func resetTimeText(for reset: Date) -> String {
+        switch timeDisplay {
+        case .resetTime:
+            return "menubar.resets_time".localized(with: reset.resetTimeString())
+        case .remainingTime:
+            return "menubar.resets_in".localized(with: reset.timeRemainingString())
+        case .both:
+            return "menubar.resets_both".localized(with: reset.timeRemainingString(), reset.resetTimeString())
+        }
     }
 }
 
@@ -697,8 +846,7 @@ struct ContextualInsights: View {
     private var insights: [Insight] {
         var result: [Insight] = []
 
-        // Session insights
-        if usage.sessionPercentage > 80 {
+        if usage.effectiveSessionPercentage > 80 {
             result.append(Insight(
                 icon: "exclamationmark.triangle.fill",
                 color: .orange,
@@ -707,7 +855,6 @@ struct ContextualInsights: View {
             ))
         }
 
-        // Weekly insights
         if usage.weeklyPercentage > 90 {
             result.append(Insight(
                 icon: "clock.fill",
@@ -717,11 +864,10 @@ struct ContextualInsights: View {
             ))
         }
 
-        // Efficiency insights
-        if usage.sessionPercentage < 20 && usage.weeklyPercentage < 30 {
+        if usage.effectiveSessionPercentage < 20 && usage.weeklyPercentage < 30 {
             result.append(Insight(
                 icon: "checkmark.circle.fill",
-                color: .green,
+                color: .adaptiveGreen,
                 title: "usage.efficient".localized,
                 description: "usage.efficient.desc".localized
             ))
@@ -731,37 +877,32 @@ struct ContextualInsights: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 2) {
             ForEach(insights, id: \.title) { insight in
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     Image(systemName: insight.icon)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 11))
                         .foregroundColor(insight.color)
                         .frame(width: 16)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(insight.title)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundColor(.primary)
 
                         Text(insight.description)
-                            .font(.system(size: 9, weight: .medium))
+                            .font(.system(size: 10))
                             .foregroundColor(.secondary)
                             .lineLimit(2)
                     }
 
                     Spacer()
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(insight.color.opacity(0.08))
-                )
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
     }
 }
 
@@ -820,7 +961,7 @@ struct ClaudeStatusRow: View {
 
     private var statusColor: Color {
         switch status.indicator.color {
-        case .green: return .green
+        case .green: return .adaptiveGreen
         case .yellow: return .yellow
         case .orange: return .orange
         case .red: return .red
@@ -835,12 +976,10 @@ struct ClaudeStatusRow: View {
             }
         }) {
             HStack(spacing: 8) {
-                // Status indicator dot
                 Circle()
                     .fill(statusColor)
                     .frame(width: 8, height: 8)
 
-                // Status text
                 Text(status.description)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.primary)
@@ -848,21 +987,20 @@ struct ClaudeStatusRow: View {
 
                 Spacer()
 
-                // External link icon
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(.secondary.opacity(0.6))
+                    .foregroundColor(.secondary)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 16)
             .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isHovered ? Color.secondary.opacity(0.05) : Color.clear)
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered ? Color.accentColor.opacity(0.1) : Color.clear)
             )
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.easeInOut(duration: 0.1)) {
                 isHovered = hovering
             }
         }
@@ -870,7 +1008,7 @@ struct ClaudeStatusRow: View {
     }
 }
 
-// MARK: - Smart Action Button
+// MARK: - Smart Action Button (kept for backward compatibility)
 struct SmartActionButton: View {
     let icon: String
     let title: String
@@ -881,30 +1019,21 @@ struct SmartActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(isDestructive ? .red : .secondary)
-                    .frame(width: 14)
+                    .font(.system(size: 10, weight: .medium))
+                    .frame(width: 12)
 
                 Text(title)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(isDestructive ? .red : .primary)
             }
+            .foregroundColor(isDestructive ? .red : (isHovered ? .primary : .secondary))
             .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(
-                        isHovered
-                        ? (isDestructive ? Color.red.opacity(0.1) : Color.accentColor.opacity(0.1))
-                        : Color.clear
-                    )
-            )
+            .padding(.vertical, 5)
         }
         .buttonStyle(.plain)
         .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(.easeInOut(duration: 0.15)) {
                 isHovered = hovering
             }
         }
@@ -1341,12 +1470,233 @@ private struct BasicSessionRow: View {
     }
 }
 
+// MARK: - API Cost Card
+struct APICostCard: View {
+    let apiUsage: APIUsage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            // Header
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("API Cost")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.primary)
+
+                    Text("This Month")
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                // Total cost
+                if let formatted = apiUsage.formattedAPICost {
+                    Text(formatted)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundColor(.primary)
+                }
+            }
+
+            // Daily cost chart
+            DailyCostChart(dailyCosts: apiUsage.sortedDailyCosts, currency: apiUsage.currency)
+
+            // Per-key breakdown (if multiple sources) or flat model list
+            if apiUsage.hasMultipleSources {
+                VStack(spacing: 6) {
+                    ForEach(apiUsage.sortedCostSources) { source in
+                        APICostSourceRow(source: source, currency: apiUsage.currency)
+                    }
+                }
+            } else {
+                // Single source or no source data — show flat model breakdown
+                let models = apiUsage.sortedModelCosts
+                if !models.isEmpty {
+                    VStack(spacing: 4) {
+                        ForEach(models, id: \.model) { item in
+                            HStack {
+                                Text(item.model)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+
+                                Spacer()
+
+                                Text(item.cost)
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+        )
+    }
+}
+
+// MARK: - Daily Cost Chart
+struct DailyCostChart: View {
+    let dailyCosts: [(date: Date, cents: Double)]
+    let currency: String
+
+    private struct DayCost: Identifiable {
+        let id: Date
+        let dollars: Double
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "MMM d"
+        return f
+    }()
+
+    private var xDomain: ClosedRange<Date> {
+        let cal = Calendar.current
+        let today = Date()
+        let startOfMonth = cal.date(from: cal.dateComponents([.year, .month], from: today))!
+        // End of today (start of tomorrow)
+        let endOfToday = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: today))!
+        return startOfMonth ... endOfToday
+    }
+
+    var body: some View {
+        if !dailyCosts.isEmpty {
+            let data = dailyCosts.map { DayCost(id: $0.date, dollars: $0.cents / 100.0) }
+            let maxValue = data.map(\.dollars).max() ?? 0
+            Chart(data) { item in
+                BarMark(
+                    x: .value("Day", item.id, unit: .day),
+                    y: .value("Cost", item.dollars),
+                    width: .fixed(12)
+                )
+                .foregroundStyle(Color.orange.opacity(0.75))
+                .cornerRadius(2)
+            }
+            .chartXScale(domain: xDomain)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { value in
+                    AxisValueLabel(centered: true) {
+                        if let date = value.as(Date.self) {
+                            Text("\(Calendar.current.component(.day, from: date))")
+                                .font(.system(size: 7))
+                                .foregroundColor(.secondary.opacity(0.6))
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.3))
+                        .foregroundStyle(Color.secondary.opacity(0.15))
+                    AxisValueLabel {
+                        if let v = value.as(Double.self) {
+                            Text(formatDollars(v, max: maxValue))
+                                .font(.system(size: 7, design: .rounded))
+                                .foregroundColor(.secondary.opacity(0.6))
+                        }
+                    }
+                }
+            }
+            .chartYScale(domain: 0 ... max(maxValue * 1.15, 0.01))
+            .frame(height: 80)
+        }
+    }
+
+    private func formatDollars(_ amount: Double, max: Double) -> String {
+        if max >= 100 {
+            return "$\(Int(amount))"
+        } else if max >= 1 {
+            return String(format: "$%.1f", amount)
+        } else {
+            return String(format: "$%.2f", amount)
+        }
+    }
+}
+
+// MARK: - API Cost Source Row
+struct APICostSourceRow: View {
+    let source: APICostSource
+    let currency: String
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(spacing: 4) {
+            // Source header (tappable to expand)
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: source.sourceType.icon)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(.secondary)
+                        .frame(width: 12)
+
+                    Text(source.keyName)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    Text(source.formattedTotal(currency: currency))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.primary)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundColor(.secondary.opacity(0.6))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.secondary.opacity(0.06))
+                )
+            }
+            .buttonStyle(.plain)
+
+            // Expanded model breakdown
+            if isExpanded {
+                let models = source.sortedModelCosts(currency: currency)
+                VStack(spacing: 3) {
+                    ForEach(models, id: \.model) { item in
+                        HStack {
+                            Text(item.model)
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            Text(item.cost)
+                                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(.leading, 24)
+                .padding(.trailing, 6)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+}
+
 // MARK: - API Usage Card
 struct APIUsageCard: View {
     let apiUsage: APIUsage
     let showRemaining: Bool
+    var timeDisplay: PopoverTimeDisplay = .resetTime
 
-    /// Display percentage based on mode
     private var displayPercentage: Double {
         UsageStatusCalculator.getDisplayPercentage(
             usedPercentage: apiUsage.usagePercentage,
@@ -1354,7 +1704,6 @@ struct APIUsageCard: View {
         )
     }
 
-    /// Status level based on display mode
     private var statusLevel: UsageStatusLevel {
         UsageStatusCalculator.calculateStatus(
             usedPercentage: apiUsage.usagePercentage,
@@ -1362,99 +1711,118 @@ struct APIUsageCard: View {
         )
     }
 
-    /// Color based on status level
     private var usageColor: Color {
         switch statusLevel {
-        case .safe: return .green
+        case .safe: return .adaptiveGreen
         case .moderate: return .orange
         case .critical: return .red
         }
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 5) {
             // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text("menubar.api_credits".localized)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.primary)
 
                     Text("menubar.anthropic_console".localized)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 10))
                         .foregroundColor(.secondary)
                 }
 
                 Spacer()
 
-                // Percentage
                 Text("\(Int(displayPercentage))%")
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundColor(usageColor)
             }
 
-            // Progress Bar
-            ZStack(alignment: .leading) {
-                // Background
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.secondary.opacity(0.1))
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(Color.primary.opacity(0.08))
 
-                // Fill
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(usageColor)
-                    .frame(maxWidth: .infinity)
-                    .scaleEffect(x: displayPercentage / 100.0, y: 1.0, anchor: .leading)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    RoundedRectangle(cornerRadius: 2.5)
+                        .fill(usageColor)
+                        .frame(width: geometry.size.width * min(displayPercentage / 100.0, 1.0))
+                        .animation(.easeInOut(duration: 0.6), value: displayPercentage)
+                }
             }
-            .frame(height: 8)
+            .frame(height: 4)
 
             // Used / Remaining
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("menubar.used".localized)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.secondary)
-                    Text(apiUsage.formattedUsed)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.primary)
-                }
+            HStack {
+                Text(apiUsage.formattedUsed)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
 
                 Spacer()
 
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text("menubar.remaining".localized)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.secondary)
-                    Text(apiUsage.formattedRemaining)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.primary)
-                }
+                Text(apiUsage.formattedRemaining)
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
             }
 
             // Reset Time
             if apiUsage.resetsAt > Date() {
-                HStack {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 8))
-                        .foregroundColor(.secondary)
-
-                    Text("menubar.resets_time".localized(with: apiUsage.resetsAt.formatted(.relative(presentation: .named))))
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.secondary)
-
-                    Spacer()
-                }
+                Text(resetTimeText(for: apiUsage.resetsAt))
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
             }
         }
-        .padding(12)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(nsColor: .controlBackgroundColor).opacity(0.4))
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(usageColor.opacity(0.2), lineWidth: 1)
-                )
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
         )
+    }
+
+    private func resetTimeText(for reset: Date) -> String {
+        switch timeDisplay {
+        case .resetTime:
+            return "menubar.resets_time".localized(with: reset.resetTimeString())
+        case .remainingTime:
+            return "menubar.resets_in".localized(with: reset.timeRemainingString())
+        case .both:
+            return "menubar.resets_both".localized(with: reset.timeRemainingString(), reset.resetTimeString())
+        }
+    }
+}
+
+// MARK: - Status Banner View
+struct StatusBannerView: View {
+    let icon: String
+    let message: String
+    let color: Color
+    var onTap: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11))
+                .foregroundColor(color)
+            Text(message)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+            Spacer()
+            if onTap != nil {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9))
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(color.opacity(0.12))
+        .cornerRadius(6)
+        .padding(.horizontal, 10)
+        .padding(.top, 4)
+        .onTapGesture { onTap?() }
     }
 }

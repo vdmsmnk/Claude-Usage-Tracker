@@ -46,9 +46,9 @@ struct AppearanceSettingsView: View {
                             title: "appearance.monochrome_title".localized,
                             description: "appearance.monochrome_description".localized,
                             isOn: Binding(
-                                get: { configuration.monochromeMode },
+                                get: { configuration.colorMode == .monochrome },
                                 set: { newValue in
-                                    configuration.monochromeMode = newValue
+                                    configuration.colorMode = newValue ? .monochrome : .multiColor
                                     saveConfiguration()
                                 }
                             )
@@ -73,6 +73,42 @@ struct AppearanceSettingsView: View {
                                 get: { configuration.showRemainingPercentage },
                                 set: { newValue in
                                     configuration.showRemainingPercentage = newValue
+                                    saveConfiguration()
+                                }
+                            )
+                        )
+
+                        SettingToggle(
+                            title: "appearance.show_time_marker_title".localized,
+                            description: "appearance.show_time_marker_description".localized,
+                            isOn: Binding(
+                                get: { configuration.showTimeMarker },
+                                set: { newValue in
+                                    configuration.showTimeMarker = newValue
+                                    saveConfiguration()
+                                }
+                            )
+                        )
+
+                        SettingToggle(
+                            title: "appearance.show_pace_marker_title".localized,
+                            description: "appearance.show_pace_marker_description".localized,
+                            isOn: Binding(
+                                get: { configuration.showPaceMarker },
+                                set: { newValue in
+                                    configuration.showPaceMarker = newValue
+                                    saveConfiguration()
+                                }
+                            )
+                        )
+
+                        SettingToggle(
+                            title: "appearance.pace_coloring_title".localized,
+                            description: "appearance.pace_coloring_description".localized,
+                            isOn: Binding(
+                                get: { configuration.usePaceColoring },
+                                set: { newValue in
+                                    configuration.usePaceColoring = newValue
                                     saveConfiguration()
                                 }
                             )

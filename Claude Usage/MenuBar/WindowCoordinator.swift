@@ -121,21 +121,11 @@ final class WindowCoordinator: NSObject {
             NSApp.setActivationPolicy(.regular)
             NSApp.activate(ignoringOtherApps: true)
 
-            let settingsView = SettingsView()
-            let hostingController = NSHostingController(rootView: settingsView)
-
-            let window = NSWindow(
-                contentRect: NSRect(origin: .zero, size: Constants.WindowSizes.settingsWindow),
-                styleMask: [.titled, .closable, .resizable],
-                backing: .buffered,
-                defer: false
-            )
+            let window = SettingsWindowBuilder.makeWindow(size: Constants.WindowSizes.settingsWindow)
             window.title = "app.window.settings".localized
-            window.contentViewController = hostingController
             window.center()
-            window.isRestorable = false
-            window.makeKeyAndOrderFront(nil)
             window.delegate = self
+            window.makeKeyAndOrderFront(nil)
 
             self.settingsWindow = window
             LoggingService.shared.logWindowEvent("Settings window opened")

@@ -57,10 +57,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDele
             SharedDataStore.shared.saveFirstLaunchDate(Date().addingTimeInterval(-2 * 24 * 60 * 60))
         }
 
+        // TESTING: Check for launch argument to force feedback prompt
+        if CommandLine.arguments.contains("--show-feedback-prompt") {
+            SharedDataStore.shared.resetFeedbackPromptForTesting()
+            SharedDataStore.shared.saveFirstLaunchDate(Date().addingTimeInterval(-8 * 24 * 60 * 60))
+        }
+
         // Check if we should show GitHub star prompt (with a slight delay to not interrupt app startup)
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
             if SharedDataStore.shared.shouldShowGitHubStarPrompt() {
                 self?.menuBarManager?.showGitHubStarPrompt()
+            }
+        }
+
+        // Check if we should show feedback prompt (after GitHub prompt, avoid overlap)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+            if SharedDataStore.shared.shouldShowFeedbackPrompt() {
+                self?.menuBarManager?.showFeedbackPrompt()
+            }
+        }
+
+        // Headless support: delayed retry for Remote Desktop scenarios
+        // If status bar failed to initialize (headless Mac), retry after a delay when displays connect
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            guard let self = self else { return }
+
+            // Only retry if we have screens now but status bar failed
+            if !NSScreen.screens.isEmpty && self.menuBarManager?.hasValidStatusBar() == false {
+                LoggingService.shared.log("AppDelegate: Delayed retry of status bar setup (headless support)")
+                self.menuBarManager?.setup()
             }
         }
     }

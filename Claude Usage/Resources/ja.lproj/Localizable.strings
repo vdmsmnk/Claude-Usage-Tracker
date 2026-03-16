@@ -70,6 +70,8 @@
 "menubar.used" = "使用済み";
 "menubar.remaining" = "残り";
 "menubar.resets_time" = "%@にリセット";
+"menubar.resets_in" = "%@後にリセット";
+"menubar.resets_both" = "%@でリセット (%@)";
 "menubar.click_status" = "クリックしてstatus.claude.comを開く";
 
 /* ==================== */
@@ -234,6 +236,16 @@
 "notification.opus_critical.message" = "週次Opus制限の%@を使用しました！%@";
 "notification.enabled.title" = "通知が有効になりました";
 "notification.enabled.message" = "使用率75%、90%、95%の閾値とセッションリセット通知を受信します。";
+"notification.profile_auto_switched.title" = "プロファイルが自動切り替えされました";
+"notification.profile_auto_switched.message" = "%@ → %@ セッション制限に達したため";
+
+/* ==================== */
+/* MARK: - Auto-Switch Profile */
+/* ==================== */
+"auto_switch.title" = "プロファイル自動切り替え";
+"auto_switch.subtitle" = "セッション制限に達した時に自動で切り替え";
+"auto_switch.enable_title" = "自動切り替えを有効にする";
+"auto_switch.enable_description" = "アクティブなプロファイルのセッション使用率が100%に達した場合、次に利用可能なプロファイルに自動的に切り替えます";
 
 /* ==================== */
 /* MARK: - Error Messages */
@@ -339,10 +351,15 @@
 "claudecode.subtitle" = "ターミナルステータスライン表示をカスタマイズ";
 "claudecode.preview_label" = "ライブプレビュー";
 "claudecode.preview_description" = "Claude CLIでのステータスラインの表示方法";
+"claudecode.component_model" = "モデル名";
 "claudecode.component_directory" = "ディレクトリ名";
 "claudecode.component_branch" = "Gitブランチ";
+"claudecode.component_context" = "コンテキストウィンドウ";
+"claudecode.component_context_tokens" = "トークンで表示（%の代わり）";
 "claudecode.component_usage" = "使用統計";
 "claudecode.component_progressbar" = "プログレスバー";
+"claudecode.component_pace_marker" = "ペースマーカー";
+"claudecode.pace_marker_info" = "経過時間位置にカラーマークを表示";
 "claudecode.component_resettime" = "リセット時刻";
 "claudecode.requirement_sessionkey" = "• 認証情報 → Claude.aiタブでセッションキーが構成されている";
 "claudecode.requirement_restart" = "• 変更適用後にClaude CLIを再起動";
@@ -424,6 +441,14 @@
 "appearance.show_labels_description" = "各メトリクスのプレフィックスラベル（S:、W:、API:）を表示";
 "appearance.show_remaining_title" = "残り容量のパーセンテージを表示";
 "appearance.show_remaining_description" = "使用済みパーセンテージの代わりに残り容量を表示（macOSバッテリーのように）";
+"appearance.pace_marker_section_title" = "ペースマーカー";
+"appearance.pace_marker_section_subtitle" = "リセット期間に対する使用ペースを追跡";
+"appearance.show_time_marker_title" = "経過時間マーカーを表示";
+"appearance.show_time_marker_description" = "プログレスバーに期間内の経過時間を示すマーカーを表示します";
+"appearance.show_pace_marker_title" = "ペースでマーカーを色分け";
+"appearance.show_pace_marker_description" = "予測使用ペースに基づいてタイムマーカーを色分けします（緑→紫）。セッションと週間メトリクスに適用されます。";
+"appearance.pace_coloring_title" = "ペース対応バーカラー";
+"appearance.pace_coloring_description" = "現在の使用レベルではなく予測ペースに基づいてプログレスバーを色分けします。期間終了までにリミットに達するかを予測します。";
 "appearance.multiprofile_locked_title" = "外観設定がロックされています";
 "appearance.multiprofile_locked_description" = "マルチプロファイル表示がアクティブな間、これらの設定は無効になっています。マルチプロファイルモードでは各プロファイルが独自の外観を使用します。";
 "appearance.disable_multiprofile" = "マルチプロファイル表示をオフにする";
@@ -455,6 +480,8 @@
 "api.single_organization" = "単一の組織が見つかり、自動的に選択されました";
 "claudecode.button_apply" = "適用";
 "claudecode.button_reset" = "リセット";
+"claudecode.component_profile" = "プロファイル名";
+"claudecode.context_info" = "コンテキストは100%ではなく約80-95%と表示される場合があります。Claudeは上限に達する前に自動圧縮を行い、出力トークンもコンテキスト領域を使用します。";
 "error.generic" = "エラー：%@";
 "personal.button_saving" = "保存中...";
 "personal.button_setup_wizard" = "セットアップウィザード";
@@ -642,6 +669,12 @@
 "section.general_desc" = "一般設定";
 "section.manage_profiles_title" = "プロファイル管理";
 "section.manage_profiles_desc" = "プロファイルを管理";
+"section.history_title" = "履歴";
+"section.history_desc" = "使用履歴を表示";
+"section.support_title" = "サポート";
+"section.support_desc" = "プロジェクト開発を支援";
+"section.debug_title" = "デバッグツール";
+"section.debug_desc" = "ネットワークログと診断";
 
 /* ==================== */
 /* MARK: - Creator Info */
@@ -686,6 +719,7 @@
 "api.remove_subtitle" = "このプロファイルからAPIコンソールセッションキーを完全に削除";
 "claudecode.button_apply" = "適用";
 "claudecode.button_reset" = "リセット";
+"claudecode.actions_title" = "アクション";
 "error.generic" = "エラー: %@";
 "personal.button_saving" = "保存中...";
 "personal.button_setup_wizard" = "セットアップウィザード";
@@ -693,6 +727,10 @@
 "personal.success_key_saved" = "セッションキーが正常に保存されました";
 "personal.remove_title" = "認証情報を削除";
 "personal.remove_subtitle" = "このプロファイルからClaude.aiセッションキーを完全に削除";
+"personal.signin_description" = "サインインしてセッションキーを自動的に取得します。";
+"personal.signin_button" = "Claude.aiにサインイン";
+"personal.signin_sheet_title" = "Claude.aiにサインイン";
+"personal.advanced_manual_key" = "詳細：手動セッションキー入力";
 "about.run_setup_wizard" = "セットアップウィザードを実行";
 
 /* Migration & Reset */
@@ -724,3 +762,199 @@
 "dashboard.compactions_auto" = "自動";
 "dashboard.compactions_manual" = "手動";
 "sessions.compaction_tooltip" = "自動 %d 件、手動 %d 件";
+
+// History
+"history.title" = "使用履歴";
+"history.subtitle" = "時間経過に伴う使用状況を追跡";
+"history.tab.session" = "セッション";
+"history.tab.weekly" = "週間";
+"history.tab.billing" = "請求";
+"history.chart.session_title" = "セッション使用履歴";
+"history.chart.weekly_title" = "週間使用トレンド";
+"history.chart.billing_title" = "月間API支出";
+"history.chart.now" = "現在";
+"history.empty.session_title" = "セッション履歴なし";
+"history.empty.session_description" = "5時間ごとのリセット後にセッション使用状況が記録されます";
+"history.empty.weekly_title" = "週間履歴なし";
+"history.empty.weekly_description" = "毎週月曜日のリセット後に週間使用状況が記録されます";
+"history.empty.billing_title" = "請求履歴なし";
+"history.empty.billing_description" = "毎月のリセット後に請求データが記録されます";
+"history.list.title" = "履歴レコード";
+"history.list.count" = "%d件のレコード";
+"history.list.empty" = "まだレコードがありません。リセットごとに自動的に履歴が記録されます。";
+"history.list.more" = "+%d件のレコード";
+"history.export_button" = "エクスポート";
+"history.clear_button" = "クリア";
+"history.no_profile" = "アクティブなプロファイルがありません";
+"history.reset_type.session" = "セッションリセット";
+"history.reset_type.weekly" = "週間リセット";
+"history.reset_type.billing" = "請求サイクル";
+"history.label.total" = "合計";
+"history.label.spent" = "使用済み";
+"history.label.session" = "セッション";
+"history.time_scale.5_hours" = "5時間";
+"history.time_scale.24_hours" = "24時間";
+"history.time_scale.7_days" = "7日間";
+"history.time_scale.30_days" = "30日間";
+"history.chart.session_usage" = "セッション使用";
+"history.chart.weekly_usage" = "週間使用";
+"history.chart.api_billing" = "API請求";
+"history.chart.no_data" = "選択範囲にデータがありません";
+"history.export.title" = "データエクスポート";
+"history.export.json" = "JSONでエクスポート";
+"history.export.csv" = "CSVでエクスポート";
+"history.chart.now" = "現在";
+"support.title" = "プロジェクトを支援";
+"support.subtitle" = "Claude使用状況トラッカーは無料でオープンソースです";
+"support.all_features_free" = "すべての機能が無料";
+"support.all_features_desc" = "このアプリのすべての機能は完全に無料です。プレミアム層、ペイウォール、サブスクリプションはありません。";
+"support.open_source" = "オープンソース";
+"support.open_source_desc" = "ソースコードはGitHubで公開されています。検査、変更、プロジェクトへの貢献が可能です。";
+"support.no_tracking" = "トラッキングなし";
+"support.no_tracking_desc" = "あなたのプライバシーは重要です。分析、テレメトリー、データ収集はありません。すべてMac上に留まります。";
+"support.message" = "このアプリが役立つと思われる場合は、開発を支援することをご検討ください";
+"support.buy_coffee" = "コーヒーを奢る";
+"support.footer" = "あなたのサポートがこのプロジェクトを生き生きと成長させ続けます";
+"support.also_support" = "次の方法でもサポートできます";
+"support.star_github" = "GitHubでスター";
+"debug.title" = "デバッグツール";
+"debug.subtitle" = "トラブルシューティングと診断のためのネットワークリクエストログ";
+"debug.network_logger" = "ネットワークリクエストロガー";
+"debug.network_logger_desc" = "詳細情報を含むすべてのAPIリクエストをキャプチャ";
+"debug.logging_duration" = "ログ記録期間";
+"debug.logging_active" = "ログ記録アクティブ";
+"debug.logging_inactive" = "ログ記録非アクティブ";
+"debug.stops_in" = "%@で停止";
+"debug.start_logging" = "ログ記録を開始";
+"debug.stop_logging" = "ログ記録を停止";
+"debug.clear_logs" = "ログをクリア";
+"debug.clear_all_logs" = "すべてのログをクリアしますか？";
+"debug.clear_logs_message" = "記録されたすべてのネットワークリクエストが完全に削除されます。";
+"debug.captured_requests" = "キャプチャされたリクエスト";
+"debug.requests_logged" = "%d件のリクエストを記録";
+"debug.no_requests" = "まだリクエストが記録されていません";
+"debug.request_details" = "リクエスト詳細";
+"debug.basic_information" = "基本情報";
+"debug.request_body" = "リクエストボディ";
+"debug.response_preview" = "レスポンスプレビュー";
+"debug.full_size" = "フルサイズ：%@";
+"debug.error" = "エラー";
+"debug.url" = "URL";
+"debug.method" = "メソッド";
+"debug.status_code" = "ステータスコード";
+"debug.duration" = "期間";
+"debug.timestamp" = "タイムスタンプ";
+"debug.duration_seconds" = "%.3f秒";
+
+/* ==================== */
+/* MARK: - Combined Usage Chart */
+/* ==================== */
+"history.chart.usage_overview" = "使用状況の概要";
+
+/* ==================== */
+/* MARK: - Keyboard Shortcuts */
+/* ==================== */
+"section.shortcuts_title" = "ショートカット";
+"section.shortcuts_desc" = "キーボードショートカットを設定";
+"shortcuts.title" = "キーボードショートカット";
+"shortcuts.subtitle" = "よく使う操作にグローバルホットキーを設定";
+"shortcuts.open_popover" = "ポップオーバーの切替";
+"shortcuts.open_popover_desc" = "使用状況パネルの表示/非表示";
+"shortcuts.refresh" = "使用状況を更新";
+"shortcuts.refresh_desc" = "最新の使用状況データを取得";
+"shortcuts.open_settings" = "設定を開く";
+"shortcuts.open_settings_desc" = "設定ウィンドウを開く";
+"shortcuts.next_profile" = "次のプロファイル";
+"shortcuts.next_profile_desc" = "次のプロファイルに切り替え";
+"shortcuts.record" = "クリックして記録";
+"shortcuts.recording" = "ショートカットを押してください...";
+"shortcuts.clear" = "クリア";
+"shortcuts.none" = "なし";
+"shortcuts.info_title" = "グローバルショートカット";
+"shortcuts.info_desc" = "ショートカットはどのアプリからでも使用できます。各ショートカットには修飾キー（Command、Option、Control、Shift）が1つ以上必要です。システムショートカットとの競合にご注意ください。";
+
+/* ==================== */
+/* MARK: - Mobile App (Coming Soon) */
+/* ==================== */
+"section.mobile_app_title" = "モバイルアプリ";
+"section.mobile_app_desc" = "モバイルアプリ近日公開";
+"mobile.title" = "モバイルアプリ";
+"mobile.subtitle" = "外出先でClaudeの使用状況を確認";
+"mobile.coming_soon_badge" = "近日公開";
+"mobile.cta_message" = "興味がありますか？お知らせください。準備ができたら通知します。";
+"mobile.notify_me" = "通知する";
+"mobile.submitting" = "送信中...";
+"mobile.notified" = "リストに登録されました！";
+"mobile.notified_desc" = "モバイルアプリが利用可能になったらお知らせします。";
+"mobile.privacy_note" = "個人データは収集されません。興味の登録のみです。";
+"mobile.error_title" = "リクエスト失敗";
+"mobile.error_message" = "興味を登録できませんでした。インターネット接続を確認して再度お試しください。";
+
+/* ==================== */
+/* MARK: - Popover Settings */
+/* ==================== */
+"section.popover_title" = "ポップオーバー";
+"section.popover_desc" = "ポップオーバーの表示をカスタマイズ";
+"section.app_settings_title" = "設定";
+"section.app_settings_desc" = "アプリの設定と起動";
+"popover.title" = "ポップオーバー";
+"popover.subtitle" = "ポップオーバーでの使用状況の表示方法をカスタマイズ";
+"popover.display_section" = "表示";
+"popover.time_display" = "時間表示";
+"popover.time_display_desc" = "リセット時間の表示方法を選択";
+"popover.time_display_reset" = "リセット時刻";
+"popover.time_display_remaining" = "残り時間";
+"popover.time_display_both" = "両方";
+"popover.time_format" = "時刻形式";
+"popover.time_format_desc" = "アプリ全体での時刻の表示形式を選択";
+"popover.time_format_system" = "システム";
+"popover.time_format_12h" = "12時間";
+"popover.time_format_24h" = "24時間";
+
+/* ==================== */
+/* MARK: - Feedback Prompt */
+/* ==================== */
+"feedback.title" = "改善にご協力ください";
+"feedback.subtitle" = "あなたのフィードバックがこのアプリの未来を作ります";
+"feedback.name_placeholder" = "名前";
+"feedback.title_label" = "役割";
+"feedback.contact_placeholder" = "メールアドレス";
+"feedback.message_placeholder" = "何でもお聞かせください — 感想、アイデア、機能リクエスト...";
+"feedback.submit" = "送信";
+"feedback.submitting" = "送信中...";
+"feedback.remind_later" = "後で通知";
+"feedback.never_show" = "今後表示しない";
+"feedback.thanks" = "フィードバックありがとうございます！";
+"feedback.error_title" = "送信失敗";
+"feedback.error_message" = "フィードバックを送信できませんでした。後でもう一度お試しください。";
+"feedback.role_developer" = "開発者";
+"feedback.role_designer" = "デザイナー";
+"feedback.role_manager" = "マネージャー";
+"feedback.role_student" = "学生";
+"feedback.role_researcher" = "研究者";
+"feedback.role_other" = "その他";
+
+// MARK: - Status Banners
+"popover.banner.credentials_expired" = "認証情報が期限切れです。設定で更新してください。";
+"popover.banner.refresh_failed" = "更新が%d回失敗しました";
+"popover.banner.updated_ago" = "%d分前に更新";
+
+// MARK: - Overage Balance
+"popover.overage_balance" = "残高";
+
+// MARK: - Setup Wizard CLI Detection
+"setup.cli_detecting" = "CLI認証情報を確認中...";
+"setup.cli_detected.title" = "CLIを検出しました！";
+"setup.cli_detected.description" = "システムにClaude Code CLIの認証情報が見つかりました。ワンクリックで使用量の追跡を開始できます。";
+"setup.cli_detected.start" = "追跡を開始";
+"setup.cli_detected.manual" = "手動で設定する";
+
+// MARK: - Custom Notification Settings
+"notifications.custom_thresholds" = "カスタムしきい値";
+"notifications.custom_threshold" = "カスタムアラート";
+"notifications.custom_placeholder" = "例: 50";
+"notifications.custom_add" = "追加";
+"notifications.sound" = "サウンド";
+"notifications.sound.default" = "デフォルト";
+"notifications.sound.none" = "なし";
+"notifications.sound.preview" = "サウンドプレビュー";

@@ -70,6 +70,8 @@
 "menubar.used" = "Verbraucht";
 "menubar.remaining" = "Verbleibend";
 "menubar.resets_time" = "Zurücksetzen %@";
+"menubar.resets_in" = "Zurücksetzung in %@";
+"menubar.resets_both" = "Zurücksetzung in %@ (%@)";
 "menubar.click_status" = "Klicken um status.claude.com zu öffnen";
 
 /* ==================== */
@@ -220,6 +222,16 @@
 "notification.opus_critical.message" = "Sie haben %@ Ihres wöchentlichen Opus-Limits verwendet! %@";
 "notification.enabled.title" = "Benachrichtigungen Aktiviert";
 "notification.enabled.message" = "Sie erhalten jetzt Warnungen bei Nutzungsschwellen von 75%, 90% und 95%, sowie Sitzungszurücksetzungsbenachrichtigungen.";
+"notification.profile_auto_switched.title" = "Profil automatisch gewechselt";
+"notification.profile_auto_switched.message" = "%@ → %@ wegen erreichtem Sitzungslimit";
+
+/* ==================== */
+/* MARK: - Auto-Switch Profile */
+/* ==================== */
+"auto_switch.title" = "Automatischer Profilwechsel";
+"auto_switch.subtitle" = "Automatisch wechseln wenn das Sitzungslimit erreicht ist";
+"auto_switch.enable_title" = "Automatischen Wechsel aktivieren";
+"auto_switch.enable_description" = "Wenn das aktive Profil 100% Sitzungsnutzung erreicht, automatisch zum nächsten verfügbaren Profil wechseln";
 
 /* ==================== */
 /* MARK: - Error Messages */
@@ -325,10 +337,15 @@
 "claudecode.subtitle" = "Passen Sie Ihre Terminal-Statuszeilenanzeige an";
 "claudecode.preview_label" = "Live-Vorschau";
 "claudecode.preview_description" = "So wird Ihre Statuszeile in Claude CLI erscheinen";
+"claudecode.component_model" = "Modellname";
 "claudecode.component_directory" = "Verzeichnisname";
 "claudecode.component_branch" = "Git-Branch";
+"claudecode.component_context" = "Kontextfenster";
+"claudecode.component_context_tokens" = "Als Tokens anzeigen (statt %)";
 "claudecode.component_usage" = "Nutzungsstatistiken";
 "claudecode.component_progressbar" = "Fortschrittsbalken";
+"claudecode.component_pace_marker" = "Tempo-Markierung";
+"claudecode.pace_marker_info" = "Zeigt einen farbigen Strich an der verstrichenen Zeitposition";
 "claudecode.component_resettime" = "Zurücksetzungszeit";
 "claudecode.requirement_sessionkey" = "• Sitzungsschlüssel im Tab 'Anmeldedaten → Claude.ai' konfiguriert";
 "claudecode.requirement_restart" = "• Claude CLI nach Anwendung der Änderungen neu starten";
@@ -410,6 +427,14 @@
 "appearance.show_labels_description" = "Präfix-Labels (S:, W:, API:) für jede Metrik anzeigen";
 "appearance.show_remaining_title" = "Verbleibender Prozentsatz anzeigen";
 "appearance.show_remaining_description" = "Verbleibende Kapazität statt genutzter Prozentsatz anzeigen (wie macOS-Batterie)";
+"appearance.pace_marker_section_title" = "Tempomarkierung";
+"appearance.pace_marker_section_subtitle" = "Nutzungstempo relativ zu Zurücksetzungszeiträumen verfolgen";
+"appearance.show_time_marker_title" = "Zeitverlaufsmarkierung anzeigen";
+"appearance.show_time_marker_description" = "Eine Markierung auf Fortschrittsbalken anzeigen, die den Zeitfortschritt im Zeitraum zeigt";
+"appearance.show_pace_marker_title" = "Markierung nach Tempo einfärben";
+"appearance.show_pace_marker_description" = "Die Zeitmarkierung nach dem prognostizierten Nutzungstempo einfärben (grün → lila). Gilt für Sitzungs- und Wochenmetriken.";
+"appearance.pace_coloring_title" = "Tempobasierte Balkenfarben";
+"appearance.pace_coloring_description" = "Fortschrittsbalken basierend auf dem prognostizierten Tempo statt dem aktuellen Nutzungsniveau einfärben. Prognostiziert, ob Limits bis zum Ende des Zeitraums erreicht werden.";
 "appearance.multiprofile_locked_title" = "Darstellungseinstellungen gesperrt";
 "appearance.multiprofile_locked_description" = "Diese Einstellungen sind deaktiviert, während die Mehrfach-Profil-Anzeige aktiv ist. Jedes Profil verwendet im Mehrfach-Profil-Modus seine eigene Darstellung.";
 "appearance.disable_multiprofile" = "Mehrfach-Profil-Anzeige ausschalten";
@@ -441,6 +466,8 @@
 "api.single_organization" = "Einzelne Organisation gefunden und automatisch ausgewählt";
 "claudecode.button_apply" = "Anwenden";
 "claudecode.button_reset" = "Zurücksetzen";
+"claudecode.component_profile" = "Profilname";
+"claudecode.context_info" = "Der Kontext kann ~80-95% statt 100% anzeigen — Claude komprimiert automatisch vor dem Limit, und Ausgabe-Tokens nutzen ebenfalls Kontextplatz.";
 "error.generic" = "Fehler: %@";
 "personal.button_saving" = "Speichern...";
 "personal.button_setup_wizard" = "Einrichtungsassistent";
@@ -642,6 +669,12 @@
 "section.general_desc" = "Allgemeine Einstellungen";
 "section.manage_profiles_title" = "Profile Verwalten";
 "section.manage_profiles_desc" = "Profile verwalten";
+"section.history_title" = "Verlauf";
+"section.history_desc" = "Nutzungsverlauf anzeigen";
+"section.support_title" = "Unterstützung";
+"section.support_desc" = "Projektentwicklung unterstützen";
+"section.debug_title" = "Debug-Tools";
+"section.debug_desc" = "Netzwerkprotokollierung und Diagnose";
 
 /* ==================== */
 /* MARK: - Creator Info */
@@ -686,6 +719,7 @@
 "api.remove_subtitle" = "Ihren API Console-Sitzungsschlüssel dauerhaft aus diesem Profil löschen";
 "claudecode.button_apply" = "Anwenden";
 "claudecode.button_reset" = "Zurücksetzen";
+"claudecode.actions_title" = "Aktionen";
 "error.generic" = "Fehler: %@";
 "personal.button_saving" = "Speichere...";
 "personal.button_setup_wizard" = "Einrichtungsassistent";
@@ -693,6 +727,10 @@
 "personal.success_key_saved" = "Sitzungsschlüssel erfolgreich gespeichert";
 "personal.remove_title" = "Anmeldedaten Entfernen";
 "personal.remove_subtitle" = "Ihren Claude.ai-Sitzungsschlüssel dauerhaft aus diesem Profil löschen";
+"personal.signin_description" = "Melden Sie sich an, um Ihren Sitzungsschlüssel automatisch zu extrahieren.";
+"personal.signin_button" = "Bei Claude.ai anmelden";
+"personal.signin_sheet_title" = "Bei Claude.ai anmelden";
+"personal.advanced_manual_key" = "Erweitert: Manueller Sitzungsschlüssel";
 "about.run_setup_wizard" = "Einrichtungsassistent Ausführen";
 
 /* Migration & Reset */
@@ -724,3 +762,199 @@
 "dashboard.compactions_auto" = "Auto";
 "dashboard.compactions_manual" = "Manuell";
 "sessions.compaction_tooltip" = "%d automatische, %d manuelle Kompaktierungen";
+
+// History
+"history.title" = "Nutzungsverlauf";
+"history.subtitle" = "Verfolgen Sie Ihre Nutzung im Zeitverlauf";
+"history.tab.session" = "Sitzungen";
+"history.tab.weekly" = "Wöchentlich";
+"history.tab.billing" = "Abrechnung";
+"history.chart.session_title" = "Sitzungsnutzungsverlauf";
+"history.chart.weekly_title" = "Wöchentlicher Nutzungstrend";
+"history.chart.billing_title" = "Monatliche API-Ausgaben";
+"history.chart.now" = "Jetzt";
+"history.empty.session_title" = "Kein Sitzungsverlauf";
+"history.empty.session_description" = "Sitzungsnutzung wird nach jedem 5-Stunden-Reset aufgezeichnet";
+"history.empty.weekly_title" = "Kein wöchentlicher Verlauf";
+"history.empty.weekly_description" = "Wöchentliche Nutzung wird nach jedem Montag-Reset aufgezeichnet";
+"history.empty.billing_title" = "Kein Abrechnungsverlauf";
+"history.empty.billing_description" = "Abrechnungsdaten werden nach jedem monatlichen Reset aufgezeichnet";
+"history.list.title" = "Verlaufsdatensätze";
+"history.list.count" = "%d Datensätze";
+"history.list.empty" = "Noch keine Datensätze. Der Verlauf wird bei jedem Reset automatisch aufgezeichnet.";
+"history.list.more" = "+%d weitere Datensätze";
+"history.export_button" = "Exportieren";
+"history.clear_button" = "Löschen";
+"history.no_profile" = "Kein aktives Profil";
+"history.reset_type.session" = "Sitzungs-Reset";
+"history.reset_type.weekly" = "Wöchentlicher Reset";
+"history.reset_type.billing" = "Abrechnungszyklus";
+"history.label.total" = "Gesamt";
+"history.label.spent" = "Ausgegeben";
+"history.label.session" = "Sitzung";
+"history.time_scale.5_hours" = "5 Stunden";
+"history.time_scale.24_hours" = "24 Stunden";
+"history.time_scale.7_days" = "7 Tage";
+"history.time_scale.30_days" = "30 Tage";
+"history.chart.session_usage" = "Sitzungsnutzung";
+"history.chart.weekly_usage" = "Wöchentliche Nutzung";
+"history.chart.api_billing" = "API-Abrechnung";
+"history.chart.no_data" = "Keine Daten im ausgewählten Bereich";
+"history.export.title" = "Daten Exportieren";
+"history.export.json" = "Als JSON exportieren";
+"history.export.csv" = "Als CSV exportieren";
+"history.chart.now" = "Jetzt";
+"support.title" = "Projekt Unterstützen";
+"support.subtitle" = "Claude Usage Tracker ist kostenlos und quelloffen";
+"support.all_features_free" = "Alle Funktionen Sind Kostenlos";
+"support.all_features_desc" = "Jede Funktion in dieser App ist vollständig kostenlos. Keine Premium-Stufen, keine Bezahlschranken, keine Abonnements.";
+"support.open_source" = "Open Source";
+"support.open_source_desc" = "Der Quellcode ist öffentlich auf GitHub verfügbar. Sie können ihn einsehen, ändern und zum Projekt beitragen.";
+"support.no_tracking" = "Kein Tracking";
+"support.no_tracking_desc" = "Ihre Privatsphäre ist wichtig. Keine Analysen, keine Telemetrie, keine Datenerfassung. Alles bleibt auf Ihrem Mac.";
+"support.message" = "Wenn Sie diese App nützlich finden, erwägen Sie, ihre Entwicklung zu unterstützen";
+"support.buy_coffee" = "Mir einen Kaffee kaufen";
+"support.footer" = "Ihre Unterstützung hält dieses Projekt am Leben und wachsen";
+"support.also_support" = "Sie können auch unterstützen durch";
+"support.star_github" = "Sternebewertung auf GitHub";
+"debug.title" = "Debug-Tools";
+"debug.subtitle" = "Netzwerkanfragen für Fehlerbehebung und Diagnose protokollieren";
+"debug.network_logger" = "Netzwerkanfragen-Logger";
+"debug.network_logger_desc" = "Alle API-Anfragen mit detaillierten Informationen erfassen";
+"debug.logging_duration" = "Protokollierungsdauer";
+"debug.logging_active" = "Protokollierung Aktiv";
+"debug.logging_inactive" = "Protokollierung Inaktiv";
+"debug.stops_in" = "Stoppt in %@";
+"debug.start_logging" = "Protokollierung Starten";
+"debug.stop_logging" = "Protokollierung Stoppen";
+"debug.clear_logs" = "Protokolle Löschen";
+"debug.clear_all_logs" = "Alle Protokolle Löschen?";
+"debug.clear_logs_message" = "Dadurch werden alle protokollierten Netzwerkanfragen dauerhaft gelöscht.";
+"debug.captured_requests" = "Erfasste Anfragen";
+"debug.requests_logged" = "%d Anfragen protokolliert";
+"debug.no_requests" = "Noch keine Anfragen protokolliert";
+"debug.request_details" = "Anfrage-Details";
+"debug.basic_information" = "Grundinformationen";
+"debug.request_body" = "Anfrage-Body";
+"debug.response_preview" = "Antwort-Vorschau";
+"debug.full_size" = "Volle Größe: %@";
+"debug.error" = "Fehler";
+"debug.url" = "URL";
+"debug.method" = "Methode";
+"debug.status_code" = "Statuscode";
+"debug.duration" = "Dauer";
+"debug.timestamp" = "Zeitstempel";
+"debug.duration_seconds" = "%.3f Sekunden";
+
+/* ==================== */
+/* MARK: - Combined Usage Chart */
+/* ==================== */
+"history.chart.usage_overview" = "Nutzungsübersicht";
+
+/* ==================== */
+/* MARK: - Keyboard Shortcuts */
+/* ==================== */
+"section.shortcuts_title" = "Kurzbefehle";
+"section.shortcuts_desc" = "Tastaturkurzbefehle konfigurieren";
+"shortcuts.title" = "Tastaturkurzbefehle";
+"shortcuts.subtitle" = "Globale Tastenkombinationen für häufige Aktionen festlegen";
+"shortcuts.open_popover" = "Panel ein-/ausblenden";
+"shortcuts.open_popover_desc" = "Nutzungspanel anzeigen oder ausblenden";
+"shortcuts.refresh" = "Nutzung aktualisieren";
+"shortcuts.refresh_desc" = "Neueste Nutzungsdaten abrufen";
+"shortcuts.open_settings" = "Einstellungen öffnen";
+"shortcuts.open_settings_desc" = "Das Einstellungsfenster öffnen";
+"shortcuts.next_profile" = "Nächstes Profil";
+"shortcuts.next_profile_desc" = "Zum nächsten Profil wechseln";
+"shortcuts.record" = "Klicken zum Aufnehmen";
+"shortcuts.recording" = "Tastenkombination drücken...";
+"shortcuts.clear" = "Löschen";
+"shortcuts.none" = "Keine";
+"shortcuts.info_title" = "Globale Kurzbefehle";
+"shortcuts.info_desc" = "Kurzbefehle funktionieren aus jeder Anwendung. Jeder Kurzbefehl muss mindestens eine Modifikatortaste enthalten (Befehl, Option, Steuerung oder Umschalt). Konflikte mit Systemkurzbefehlen vermeiden.";
+
+/* ==================== */
+/* MARK: - Mobile App (Coming Soon) */
+/* ==================== */
+"section.mobile_app_title" = "Mobile App";
+"section.mobile_app_desc" = "Mobile App kommt bald";
+"mobile.title" = "Mobile App";
+"mobile.subtitle" = "Verfolge deine Claude-Nutzung unterwegs";
+"mobile.coming_soon_badge" = "DEMNÄCHST";
+"mobile.cta_message" = "Interessiert? Lass es uns wissen und wir benachrichtigen dich, wenn es fertig ist.";
+"mobile.notify_me" = "Benachrichtige mich";
+"mobile.submitting" = "Wird gesendet...";
+"mobile.notified" = "Du bist auf der Liste!";
+"mobile.notified_desc" = "Wir informieren dich, wenn die Mobile App verfügbar ist.";
+"mobile.privacy_note" = "Es werden keine persönlichen Daten erhoben. Dies registriert nur dein Interesse.";
+"mobile.error_title" = "Anfrage fehlgeschlagen";
+"mobile.error_message" = "Dein Interesse konnte nicht registriert werden. Bitte überprüfe deine Internetverbindung und versuche es erneut.";
+
+/* ==================== */
+/* MARK: - Popover Settings */
+/* ==================== */
+"section.popover_title" = "Popover";
+"section.popover_desc" = "Popover-Anzeige anpassen";
+"section.app_settings_title" = "Einstellungen";
+"section.app_settings_desc" = "App-Einstellungen und Autostart";
+"popover.title" = "Popover";
+"popover.subtitle" = "Anzeige der Nutzungsinformationen im Popover anpassen";
+"popover.display_section" = "Anzeige";
+"popover.time_display" = "Zeitanzeige";
+"popover.time_display_desc" = "Wählen Sie, was für Zurücksetzungszeiten angezeigt wird";
+"popover.time_display_reset" = "Uhrzeit";
+"popover.time_display_remaining" = "Verbleibend";
+"popover.time_display_both" = "Beides";
+"popover.time_format" = "Zeitformat";
+"popover.time_format_desc" = "Wählen Sie, wie Uhrzeiten in der App angezeigt werden";
+"popover.time_format_system" = "System";
+"popover.time_format_12h" = "12-Stunden";
+"popover.time_format_24h" = "24-Stunden";
+
+/* ==================== */
+/* MARK: - Feedback Prompt */
+/* ==================== */
+"feedback.title" = "Hilf uns zu Verbessern";
+"feedback.subtitle" = "Dein Feedback gestaltet die Zukunft dieser App";
+"feedback.name_placeholder" = "Name";
+"feedback.title_label" = "Rolle";
+"feedback.contact_placeholder" = "Email";
+"feedback.message_placeholder" = "Erzähl uns alles — Feedback, Ideen, Feature-Wünsche...";
+"feedback.submit" = "Absenden";
+"feedback.submitting" = "Wird gesendet...";
+"feedback.remind_later" = "Später Erinnern";
+"feedback.never_show" = "Nicht Mehr Fragen";
+"feedback.thanks" = "Danke für dein Feedback!";
+"feedback.error_title" = "Senden Fehlgeschlagen";
+"feedback.error_message" = "Feedback konnte nicht gesendet werden. Bitte versuche es später erneut.";
+"feedback.role_developer" = "Entwickler";
+"feedback.role_designer" = "Designer";
+"feedback.role_manager" = "Manager";
+"feedback.role_student" = "Student";
+"feedback.role_researcher" = "Forscher";
+"feedback.role_other" = "Andere";
+
+// MARK: - Status Banners
+"popover.banner.credentials_expired" = "Anmeldedaten abgelaufen. In Einstellungen aktualisieren.";
+"popover.banner.refresh_failed" = "Aktualisierung %d-mal fehlgeschlagen";
+"popover.banner.updated_ago" = "Vor %dm aktualisiert";
+
+// MARK: - Overage Balance
+"popover.overage_balance" = "Guthaben";
+
+// MARK: - Setup Wizard CLI Detection
+"setup.cli_detecting" = "CLI-Anmeldedaten werden gesucht...";
+"setup.cli_detected.title" = "CLI Erkannt!";
+"setup.cli_detected.description" = "Claude Code CLI-Anmeldedaten auf Ihrem System gefunden. Starten Sie das Tracking mit einem Klick.";
+"setup.cli_detected.start" = "Tracking Starten";
+"setup.cli_detected.manual" = "Manuell Einrichten";
+
+// MARK: - Custom Notification Settings
+"notifications.custom_thresholds" = "Benutzerdefinierte Schwellenwerte";
+"notifications.custom_threshold" = "Benutzerdefinierte Warnung";
+"notifications.custom_placeholder" = "z.B. 50";
+"notifications.custom_add" = "Hinzufügen";
+"notifications.sound" = "Ton";
+"notifications.sound.default" = "Standard";
+"notifications.sound.none" = "Keiner";
+"notifications.sound.preview" = "Ton-Vorschau";
